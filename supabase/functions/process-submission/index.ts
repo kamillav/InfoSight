@@ -10,7 +10,7 @@ const corsHeaders = {
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const openaiApiKey = Deno.env.get('OPENAI_API_KEY')!;
+const openaiApiKey = Deno.env.get('OPEN_API_KEY')!; // Fixed: Using correct secret name
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -27,6 +27,10 @@ serve(async (req) => {
     console.log('Processing submission:', submissionId);
     console.log('OpenAI API Key present:', !!openaiApiKey);
 
+    if (!openaiApiKey) {
+      throw new Error('OpenAI API key not configured');
+    }
+
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Get submission details
@@ -37,13 +41,19 @@ serve(async (req) => {
       .single();
 
     if (submissionError || !submission) {
+      console.error('Submission not found:', submissionError);
       throw new Error('Submission not found');
     }
 
-    console.log('Processing submission:', submissionId);
+    console.log('Found submission:', submission.id);
 
     let fullTranscript = '';
-    const videoFile = submission.video_files as { path: string; name: string };
+    const videoFile = submission.video_files;
+
+    // Validate video file structure
+    if (!videoFile || !videoFile.path) {
+      throw new Error('Invalid video file structure');
+    }
 
     // Process the video file
     try {
@@ -56,17 +66,17 @@ serve(async (req) => {
 
       if (downloadError || !videoData) {
         console.error('Error downloading video:', downloadError);
-        throw new Error('Failed to download video file');
+        throw new Error(`Failed to download video file: ${downloadError?.message || 'Unknown error'}`);
       }
 
-      console.log('Video downloaded, size:', videoData.size);
+      console.log('Video downloaded successfully, size:', videoData.size);
 
       // Convert video blob to audio and send to Whisper
       const formData = new FormData();
-      formData.append('file', videoData, 'video.webm');
+      formData.append('file', videoData, videoFile.name || 'video.webm');
       formData.append('model', 'whisper-1');
 
-      console.log('Sending to OpenAI Whisper...');
+      console.log('Sending to OpenAI Whisper API...');
 
       const transcriptionResponse = await fetch('https://api.openai.com/v1/audio/transcriptions', {
         method: 'POST',
@@ -76,32 +86,40 @@ serve(async (req) => {
         body: formData,
       });
 
+      console.log('Whisper API response status:', transcriptionResponse.status);
+
       if (!transcriptionResponse.ok) {
         const errorText = await transcriptionResponse.text();
-        console.error('Whisper API error:', errorText);
-        throw new Error(`Whisper API error: ${errorText}`);
+        console.error('Whisper API error response:', errorText);
+        throw new Error(`Whisper API error (${transcriptionResponse.status}): ${errorText}`);
       }
 
       const transcriptionResult = await transcriptionResponse.json();
-      fullTranscript = transcriptionResult.text;
-      console.log('Transcription completed, length:', fullTranscript.length);
+      fullTranscript = transcriptionResult.text || '';
+      console.log('Transcription completed successfully, length:', fullTranscript.length);
+      
+      if (!fullTranscript) {
+        console.warn('Empty transcript received from Whisper API');
+      }
     } catch (error) {
-      console.error('Error processing video:', error);
-      throw error;
+      console.error('Error processing video with Whisper:', error);
+      throw new Error(`Video processing failed: ${error.message}`);
     }
 
     // Process PDF if present
     let pdfText = '';
     if (submission.pdf_file) {
       try {
+        console.log('Processing PDF file:', submission.pdf_file);
         const { data: pdfData, error: pdfError } = await supabase.storage
           .from('submissions')
           .download(submission.pdf_file);
 
         if (!pdfError && pdfData) {
-          // For now, we'll just note that PDF was uploaded
-          // In a production app, you'd use a PDF parsing library
           pdfText = 'PDF document uploaded (text extraction not implemented in demo)';
+          console.log('PDF processed successfully');
+        } else {
+          console.warn('PDF processing failed:', pdfError);
         }
       } catch (error) {
         console.error('Error processing PDF:', error);
@@ -148,7 +166,7 @@ Please respond in this JSON format:
         messages: [
           {
             role: 'system',
-            content: 'You are an AI assistant that analyzes work updates and extracts key insights. Always respond with valid JSON.'
+            content: 'You are an AI assistant that analyzes work updates and extracts key insights. Always respond with valid JSON only.'
           },
           {
             role: 'user',
@@ -159,6 +177,8 @@ Please respond in this JSON format:
       }),
     });
 
+    console.log('GPT-4 API response status:', analysisResponse.status);
+
     let analysisResult = {
       key_points: ['Content processed successfully'],
       extracted_kpis: [],
@@ -168,18 +188,26 @@ Please respond in this JSON format:
 
     if (!analysisResponse.ok) {
       const errorText = await analysisResponse.text();
-      console.error('GPT-4 API error:', errorText);
+      console.error('GPT-4 API error response:', errorText);
+      console.warn('Using default analysis result due to GPT-4 API error');
     } else {
-      const gptResponse = await analysisResponse.json();
       try {
-        analysisResult = JSON.parse(gptResponse.choices[0].message.content);
-        console.log('Analysis completed:', analysisResult);
+        const gptResponse = await analysisResponse.json();
+        const content = gptResponse.choices[0]?.message?.content;
+        if (content) {
+          analysisResult = JSON.parse(content);
+          console.log('Analysis completed successfully:', analysisResult);
+        } else {
+          console.error('No content in GPT-4 response');
+        }
       } catch (parseError) {
         console.error('Error parsing GPT response:', parseError);
+        console.warn('Using default analysis result due to parsing error');
       }
     }
 
     // Update submission with results
+    console.log('Updating submission with results...');
     const { error: updateError } = await supabase
       .from('submissions')
       .update({
@@ -194,6 +222,7 @@ Please respond in this JSON format:
       .eq('id', submissionId);
 
     if (updateError) {
+      console.error('Error updating submission:', updateError);
       throw updateError;
     }
 
@@ -228,7 +257,7 @@ Please respond in this JSON format:
     // Update submission status to failed
     try {
       const supabase = createClient(supabaseUrl, supabaseServiceKey);
-      const { submissionId } = await req.json();
+      const { submissionId } = await req.json().catch(() => ({}));
       
       if (submissionId) {
         await supabase
@@ -239,6 +268,8 @@ Please respond in this JSON format:
             updated_at: new Date().toISOString(),
           })
           .eq('id', submissionId);
+        
+        console.log('Updated submission status to error for:', submissionId);
       }
     } catch (updateError) {
       console.error('Error updating failed status:', updateError);

@@ -158,7 +158,10 @@ export const VideoUpload = () => {
         .from('submissions')
         .upload(videoFileName, selectedVideo);
 
-      if (videoError) throw videoError;
+      if (videoError) {
+        console.error('Video upload error:', videoError);
+        throw new Error(`Video upload failed: ${videoError.message}`);
+      }
       console.log('Video uploaded successfully:', videoUpload.path);
 
       // Upload PDF if selected (shared across all questions)
@@ -169,7 +172,10 @@ export const VideoUpload = () => {
           .from('submissions')
           .upload(pdfFileName, selectedPDF);
 
-        if (pdfError) throw pdfError;
+        if (pdfError) {
+          console.error('PDF upload error:', pdfError);
+          throw new Error(`PDF upload failed: ${pdfError.message}`);
+        }
         console.log('PDF uploaded successfully:', pdfUpload.path);
       }
 
@@ -188,25 +194,33 @@ export const VideoUpload = () => {
         .select()
         .single();
 
-      if (dbError) throw dbError;
+      if (dbError) {
+        console.error('Database insert error:', dbError);
+        throw new Error(`Failed to create submission: ${dbError.message}`);
+      }
       console.log('Submission created:', submission);
 
       // Call the edge function to process the submission
-      const { error: processingError } = await supabase.functions.invoke('process-submission', {
+      console.log('Calling process-submission edge function...');
+      const { data: functionResult, error: processingError } = await supabase.functions.invoke('process-submission', {
         body: { submissionId: submission.id }
       });
 
       if (processingError) {
-        console.error('Processing error:', processingError);
+        console.error('Edge function processing error:', processingError);
         // Update submission status to error
         await supabase
           .from('submissions')
           .update({ 
             status: 'error', 
-            processing_error: processingError.message 
+            processing_error: `Processing function error: ${processingError.message}` 
           })
           .eq('id', submission.id);
+          
+        throw new Error(`Processing failed: ${processingError.message}`);
       }
+
+      console.log('Edge function called successfully:', functionResult);
 
       toast({
         title: "Submission uploaded successfully!",
@@ -225,13 +239,15 @@ export const VideoUpload = () => {
         videoInputRefs.current[questionIndex]!.value = '';
       }
 
-      // Reload submissions
-      loadSubmissions();
+      // Reload submissions after a short delay to see the new submission
+      setTimeout(() => {
+        loadSubmissions();
+      }, 1000);
     } catch (error) {
       console.error('Upload error:', error);
       toast({
         title: "Upload failed",
-        description: "There was an error uploading your files. Please try again.",
+        description: error instanceof Error ? error.message : "There was an error uploading your files. Please try again.",
         variant: "destructive"
       });
     } finally {
