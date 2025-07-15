@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -97,6 +98,19 @@ export const InsightsView = ({ userId }: InsightsViewProps) => {
       return videoFiles as string[];
     }
     return [];
+  };
+
+  const getVideoFilesDisplay = (videoFiles: Json): string => {
+    if (Array.isArray(videoFiles)) {
+      return `${videoFiles.length} video(s)`;
+    } else if (typeof videoFiles === 'object' && videoFiles !== null) {
+      // Handle object with name property
+      const fileObj = videoFiles as Record<string, any>;
+      return fileObj.name || 'Video file';
+    } else if (typeof videoFiles === 'string') {
+      return videoFiles;
+    }
+    return 'Video files';
   };
 
   if (loading) {
@@ -259,7 +273,7 @@ export const InsightsView = ({ userId }: InsightsViewProps) => {
                           </div>
                         )}
                         <div className="text-xs text-gray-500">
-                          <p>Video: {submission.video_files?.name || 'Unknown'}</p>
+                          <p>Videos: {getVideoFilesDisplay(submission.video_files)}</p>
                           {submission.pdf_file && <p>PDF: Document included</p>}
                         </div>
                       </div>
