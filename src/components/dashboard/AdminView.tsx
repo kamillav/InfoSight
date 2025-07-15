@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { WordCloudChart } from './charts/WordCloudChart';
 import { KPIChart } from './charts/KPIChart';
 import { SentimentChart } from './charts/SentimentChart';
-import { Users, TrendingUp, MessageSquare, BarChart3, Plus, Edit, Trash2 } from 'lucide-react';
+import { Users, TrendingUp, MessageSquare, BarChart3, Plus, Edit, Trash2, Target, Lightbulb } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
@@ -56,6 +56,7 @@ export const AdminView = () => {
   const [kpis, setKpis] = useState<KPIDefinition[]>([]);
   const [submissions, setSubmissions] = useState<UserSubmission[]>([]);
   const [users, setUsers] = useState<UserProfile[]>([]);
+  const [extractedKPIs, setExtractedKPIs] = useState<{kpi: string, count: number, submissions: string[]}[]>([]);
   const [loading, setLoading] = useState(true);
   const [isKPIDialogOpen, setIsKPIDialogOpen] = useState(false);
   const [editingKPI, setEditingKPI] = useState<KPIDefinition | null>(null);
@@ -121,8 +122,30 @@ export const AdminView = () => {
       return;
     }
 
-    // Simply cast the data without complex type assertions
     setSubmissions((data as any) || []);
+    
+    // Process extracted KPIs
+    const kpiMap = new Map<string, {count: number, submissions: string[]}>();
+    
+    (data as any)?.forEach((submission: UserSubmission) => {
+      if (submission.extracted_kpis && submission.status === 'completed') {
+        submission.extracted_kpis.forEach((kpi: string) => {
+          if (kpiMap.has(kpi)) {
+            const existing = kpiMap.get(kpi)!;
+            existing.count += 1;
+            existing.submissions.push(submission.id);
+          } else {
+            kpiMap.set(kpi, { count: 1, submissions: [submission.id] });
+          }
+        });
+      }
+    });
+
+    const extractedKPIArray = Array.from(kpiMap.entries())
+      .map(([kpi, data]) => ({ kpi, count: data.count, submissions: data.submissions }))
+      .sort((a, b) => b.count - a.count);
+
+    setExtractedKPIs(extractedKPIArray);
   };
 
   const fetchUsers = async () => {
@@ -179,6 +202,36 @@ export const AdminView = () => {
         variant: "destructive"
       });
     }
+  };
+
+  const handleCreateKPIFromExtracted = async (extractedKPI: string) => {
+    // Parse the extracted KPI to separate name, value, and unit
+    const parts = extractedKPI.split(':');
+    let name = extractedKPI;
+    let value = '';
+    let unit = '';
+
+    if (parts.length === 2) {
+      name = parts[0].trim();
+      const valueWithUnit = parts[1].trim();
+      
+      // Try to extract numeric value and unit
+      const match = valueWithUnit.match(/^([\d.,]+)\s*(.*)$/);
+      if (match) {
+        value = match[1];
+        unit = match[2] || '';
+      }
+    }
+
+    setKpiForm({
+      name,
+      description: `Extracted from user submissions: ${extractedKPI}`,
+      category: 'User Generated',
+      target_value: value,
+      unit
+    });
+    setEditingKPI(null);
+    setIsKPIDialogOpen(true);
   };
 
   const handleUpdateKPI = async () => {
@@ -352,8 +405,9 @@ export const AdminView = () => {
       </div>
 
       <Tabs defaultValue="overview" className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="extracted-kpis">AI Extracted KPIs</TabsTrigger>
           <TabsTrigger value="kpi-management">KPI Management</TabsTrigger>
           <TabsTrigger value="user-performance">User Performance</TabsTrigger>
           <TabsTrigger value="submissions">All Submissions</TabsTrigger>
@@ -398,6 +452,53 @@ export const AdminView = () => {
               </CardContent>
             </Card>
           </div>
+        </TabsContent>
+
+        <TabsContent value="extracted-kpis" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Lightbulb className="w-5 h-5" />
+                AI Extracted KPIs from User Submissions
+              </CardTitle>
+              <CardDescription>
+                Review KPIs extracted by AI from user videos to potentially add them as official metrics
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {extractedKPIs.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  No KPIs have been extracted from submissions yet.
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {extractedKPIs.map((item, index) => (
+                    <div key={index} className="border rounded-lg p-4 hover:bg-gray-50 transition-colors">
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <h3 className="font-medium text-gray-900">{item.kpi}</h3>
+                          <p className="text-sm text-gray-600 mt-1">
+                            Mentioned in {item.count} submission{item.count > 1 ? 's' : ''}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="secondary">{item.count}x</Badge>
+                          <Button
+                            size="sm"
+                            onClick={() => handleCreateKPIFromExtracted(item.kpi)}
+                            className="bg-green-600 hover:bg-green-700"
+                          >
+                            <Target className="w-3 h-3 mr-1" />
+                            Add as KPI
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
         
         <TabsContent value="kpi-management" className="space-y-6">

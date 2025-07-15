@@ -24,6 +24,9 @@ serve(async (req) => {
       throw new Error('Submission ID is required');
     }
 
+    console.log('Processing submission:', submissionId);
+    console.log('OpenAI API Key present:', !!openaiApiKey);
+
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Get submission details
@@ -40,42 +43,51 @@ serve(async (req) => {
     console.log('Processing submission:', submissionId);
 
     let fullTranscript = '';
-    const videoFiles = submission.video_files as string[];
+    const videoFile = submission.video_files as { path: string; name: string };
 
-    // Process each video file
-    for (const videoPath of videoFiles) {
-      try {
-        // Download video from storage
-        const { data: videoData, error: downloadError } = await supabase.storage
-          .from('submissions')
-          .download(videoPath);
+    // Process the video file
+    try {
+      console.log('Downloading video from:', videoFile.path);
+      
+      // Download video from storage
+      const { data: videoData, error: downloadError } = await supabase.storage
+        .from('submissions')
+        .download(videoFile.path);
 
-        if (downloadError || !videoData) {
-          console.error('Error downloading video:', downloadError);
-          continue;
-        }
-
-        // Convert video blob to audio and send to Whisper
-        const formData = new FormData();
-        formData.append('file', videoData, 'video.webm');
-        formData.append('model', 'whisper-1');
-
-        const transcriptionResponse = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${openaiApiKey}`,
-          },
-          body: formData,
-        });
-
-        if (transcriptionResponse.ok) {
-          const transcriptionResult = await transcriptionResponse.json();
-          fullTranscript += transcriptionResult.text + '\n\n';
-          console.log('Transcribed video:', videoPath);
-        }
-      } catch (error) {
-        console.error('Error processing video:', videoPath, error);
+      if (downloadError || !videoData) {
+        console.error('Error downloading video:', downloadError);
+        throw new Error('Failed to download video file');
       }
+
+      console.log('Video downloaded, size:', videoData.size);
+
+      // Convert video blob to audio and send to Whisper
+      const formData = new FormData();
+      formData.append('file', videoData, 'video.webm');
+      formData.append('model', 'whisper-1');
+
+      console.log('Sending to OpenAI Whisper...');
+
+      const transcriptionResponse = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${openaiApiKey}`,
+        },
+        body: formData,
+      });
+
+      if (!transcriptionResponse.ok) {
+        const errorText = await transcriptionResponse.text();
+        console.error('Whisper API error:', errorText);
+        throw new Error(`Whisper API error: ${errorText}`);
+      }
+
+      const transcriptionResult = await transcriptionResponse.json();
+      fullTranscript = transcriptionResult.text;
+      console.log('Transcription completed, length:', fullTranscript.length);
+    } catch (error) {
+      console.error('Error processing video:', error);
+      throw error;
     }
 
     // Process PDF if present
@@ -101,7 +113,7 @@ serve(async (req) => {
 Please analyze the following weekly update content and extract:
 
 1. Key Points: List 3-5 main achievements or important points
-2. KPIs: Extract any metrics, numbers, or performance indicators mentioned
+2. KPIs: Extract any metrics, numbers, or performance indicators mentioned (be specific with the metric name and value)
 3. Sentiment: Overall sentiment (positive, neutral, or negative)
 4. Notable Quotes: 2-3 impactful quotes from the content
 
@@ -117,11 +129,13 @@ ${pdfText}
 Please respond in this JSON format:
 {
   "key_points": ["point1", "point2", "point3"],
-  "extracted_kpis": ["kpi1", "kpi2"],
+  "extracted_kpis": ["Revenue increased by 15%", "Customer satisfaction: 94%", "Response time: 2.3 seconds"],
   "sentiment": "positive|neutral|negative",
   "ai_quotes": ["quote1", "quote2"]
 }
 `;
+
+    console.log('Sending to GPT-4 for analysis...');
 
     const analysisResponse = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -152,10 +166,14 @@ Please respond in this JSON format:
       ai_quotes: []
     };
 
-    if (analysisResponse.ok) {
+    if (!analysisResponse.ok) {
+      const errorText = await analysisResponse.text();
+      console.error('GPT-4 API error:', errorText);
+    } else {
       const gptResponse = await analysisResponse.json();
       try {
         analysisResult = JSON.parse(gptResponse.choices[0].message.content);
+        console.log('Analysis completed:', analysisResult);
       } catch (parseError) {
         console.error('Error parsing GPT response:', parseError);
       }
@@ -190,22 +208,22 @@ Please respond in this JSON format:
     console.error('Error processing submission:', error);
 
     // Update submission status to failed
-    if (req.url.includes('submissionId')) {
-      try {
-        const supabase = createClient(supabaseUrl, supabaseServiceKey);
-        const { submissionId } = await req.json();
-        
+    try {
+      const supabase = createClient(supabaseUrl, supabaseServiceKey);
+      const { submissionId } = await req.json();
+      
+      if (submissionId) {
         await supabase
           .from('submissions')
           .update({
-            status: 'failed',
+            status: 'error',
             processing_error: error.message,
             updated_at: new Date().toISOString(),
           })
           .eq('id', submissionId);
-      } catch (updateError) {
-        console.error('Error updating failed status:', updateError);
       }
+    } catch (updateError) {
+      console.error('Error updating failed status:', updateError);
     }
 
     return new Response(

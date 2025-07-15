@@ -30,18 +30,18 @@ interface Submission {
   processing_error: string | null;
   created_at: string;
   updated_at: string;
+  question_index?: number;
 }
 
 export const VideoUpload = () => {
-  const [selectedVideo, setSelectedVideo] = useState<File | null>(null);
+  const [selectedVideos, setSelectedVideos] = useState<(File | null)[]>([null, null, null]);
   const [selectedPDF, setSelectedPDF] = useState<File | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const [processing, setProcessing] = useState(false);
-  const [currentQuestion, setCurrentQuestion] = useState(0);
-  const [notes, setNotes] = useState('');
+  const [uploading, setUploading] = useState<boolean[]>([false, false, false]);
+  const [processing, setProcessing] = useState<boolean[]>([false, false, false]);
+  const [notes, setNotes] = useState(['', '', '']);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loadingSubmissions, setLoadingSubmissions] = useState(true);
-  const videoInputRef = useRef<HTMLInputElement>(null);
+  const videoInputRefs = useRef<(HTMLInputElement | null)[]>([null, null, null]);
   const pdfInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const { user, profile } = useAuth();
@@ -77,7 +77,7 @@ export const VideoUpload = () => {
     }
   };
 
-  const handleVideoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleVideoSelect = (questionIndex: number, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       // Validate file type and size
@@ -99,7 +99,9 @@ export const VideoUpload = () => {
         return;
       }
 
-      setSelectedVideo(file);
+      const newSelectedVideos = [...selectedVideos];
+      newSelectedVideos[questionIndex] = file;
+      setSelectedVideos(newSelectedVideos);
     }
   };
 
@@ -129,7 +131,8 @@ export const VideoUpload = () => {
     }
   };
 
-  const handleUpload = async () => {
+  const handleUpload = async (questionIndex: number) => {
+    const selectedVideo = selectedVideos[questionIndex];
     if (!selectedVideo || !user || !profile) {
       toast({
         title: "Missing required files",
@@ -139,14 +142,18 @@ export const VideoUpload = () => {
       return;
     }
 
-    setUploading(true);
-    setProcessing(true);
+    const newUploading = [...uploading];
+    const newProcessing = [...processing];
+    newUploading[questionIndex] = true;
+    newProcessing[questionIndex] = true;
+    setUploading(newUploading);
+    setProcessing(newProcessing);
 
     try {
-      console.log('Starting submission process...');
+      console.log('Starting submission process for question:', questionIndex);
 
       // Upload video to Supabase Storage
-      const videoFileName = `${user.id}/${Date.now()}_${selectedVideo.name}`;
+      const videoFileName = `${user.id}/${Date.now()}_q${questionIndex}_${selectedVideo.name}`;
       const { data: videoUpload, error: videoError } = await supabase.storage
         .from('submissions')
         .upload(videoFileName, selectedVideo);
@@ -154,10 +161,10 @@ export const VideoUpload = () => {
       if (videoError) throw videoError;
       console.log('Video uploaded successfully:', videoUpload.path);
 
-      // Upload PDF if selected
+      // Upload PDF if selected (shared across all questions)
       let pdfFileName = null;
       if (selectedPDF) {
-        pdfFileName = `${user.id}/${Date.now()}_${selectedPDF.name}`;
+        pdfFileName = `${user.id}/${Date.now()}_shared_${selectedPDF.name}`;
         const { data: pdfUpload, error: pdfError } = await supabase.storage
           .from('submissions')
           .upload(pdfFileName, selectedPDF);
@@ -166,14 +173,16 @@ export const VideoUpload = () => {
         console.log('PDF uploaded successfully:', pdfUpload.path);
       }
 
-      // Create submission record in database
+      // Create submission record in database with question context
+      const submissionNotes = `Question ${questionIndex + 1}: ${PRESET_QUESTIONS[questionIndex]}\n\nResponse: ${notes[questionIndex] || 'No additional notes provided.'}`;
+      
       const { data: submission, error: dbError } = await supabase
         .from('submissions')
         .insert({
           user_id: user.id,
-          video_files: { path: videoUpload.path, name: selectedVideo.name },
+          video_files: { path: videoUpload.path, name: selectedVideo.name, question_index: questionIndex },
           pdf_file: pdfFileName,
-          notes: notes || null,
+          notes: submissionNotes,
           status: 'processing'
         })
         .select()
@@ -201,19 +210,19 @@ export const VideoUpload = () => {
 
       toast({
         title: "Submission uploaded successfully!",
-        description: "Your video is being processed. You'll see the results shortly.",
+        description: `Your video for question ${questionIndex + 1} is being processed.`,
       });
 
-      // Reset form
-      setSelectedVideo(null);
-      setSelectedPDF(null);
-      setNotes('');
-      setCurrentQuestion(0);
-      if (videoInputRef.current) {
-        videoInputRef.current.value = '';
-      }
-      if (pdfInputRef.current) {
-        pdfInputRef.current.value = '';
+      // Reset form for this question
+      const newSelectedVideos = [...selectedVideos];
+      const newNotes = [...notes];
+      newSelectedVideos[questionIndex] = null;
+      newNotes[questionIndex] = '';
+      setSelectedVideos(newSelectedVideos);
+      setNotes(newNotes);
+      
+      if (videoInputRefs.current[questionIndex]) {
+        videoInputRefs.current[questionIndex]!.value = '';
       }
 
       // Reload submissions
@@ -226,8 +235,12 @@ export const VideoUpload = () => {
         variant: "destructive"
       });
     } finally {
-      setUploading(false);
-      setProcessing(false);
+      const newUploading = [...uploading];
+      const newProcessing = [...processing];
+      newUploading[questionIndex] = false;
+      newProcessing[questionIndex] = false;
+      setUploading(newUploading);
+      setProcessing(newProcessing);
     }
   };
 
@@ -249,50 +262,30 @@ export const VideoUpload = () => {
     }
   };
 
+  const getQuestionFromSubmission = (submission: Submission) => {
+    const questionIndex = submission.video_files?.question_index;
+    if (questionIndex !== undefined && questionIndex >= 0 && questionIndex < PRESET_QUESTIONS.length) {
+      return PRESET_QUESTIONS[questionIndex];
+    }
+    return 'General Submission';
+  };
+
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Video className="w-5 h-5" />
-              Weekly Impact Submission
-            </CardTitle>
-            <CardDescription>
-              Upload a video (max 2 minutes, 200MB) and optional PDF document
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="space-y-4">
-              <Label>Video File *</Label>
-              <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors">
-                <input
-                  ref={videoInputRef}
-                  type="file"
-                  accept="video/*"
-                  onChange={handleVideoSelect}
-                  className="hidden"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => videoInputRef.current?.click()}
-                  className="w-full"
-                >
-                  <Upload className="w-4 h-4 mr-2" />
-                  Choose Video File
-                </Button>
-                {selectedVideo && (
-                  <div className="mt-4 flex items-center justify-center gap-2 text-sm text-gray-600">
-                    <CheckCircle className="w-4 h-4 text-green-500" />
-                    {selectedVideo.name}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <Label>Supporting PDF Document (Optional)</Label>
+        <div className="space-y-6">
+          {/* Shared PDF Upload */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="w-5 h-5" />
+                Supporting Document (Optional)
+              </CardTitle>
+              <CardDescription>
+                Upload a PDF document that supports all your video responses
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
               <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors">
                 <input
                   ref={pdfInputRef}
@@ -317,76 +310,103 @@ export const VideoUpload = () => {
                   </div>
                 )}
               </div>
-            </div>
+            </CardContent>
+          </Card>
 
-            <div className="space-y-2">
-              <Label htmlFor="notes">Additional Notes (Optional)</Label>
-              <Textarea
-                id="notes"
-                placeholder="Add any additional context or notes about your week..."
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                rows={4}
-              />
-            </div>
-
-            <Button
-              onClick={handleUpload}
-              disabled={!selectedVideo || uploading}
-              className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
-            >
-              {processing ? (
-                <div className="flex items-center gap-2">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                  Processing Submission...
+          {/* Video Upload Slots */}
+          {PRESET_QUESTIONS.map((question, index) => (
+            <Card key={index}>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Video className="w-5 h-5" />
+                  Question {index + 1}
+                </CardTitle>
+                <CardDescription className="text-sm font-medium text-gray-700">
+                  {question}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors">
+                  <input
+                    ref={(el) => (videoInputRefs.current[index] = el)}
+                    type="file"
+                    accept="video/*"
+                    onChange={(e) => handleVideoSelect(index, e)}
+                    className="hidden"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => videoInputRefs.current[index]?.click()}
+                    className="w-full"
+                  >
+                    <Upload className="w-4 h-4 mr-2" />
+                    Choose Video File
+                  </Button>
+                  {selectedVideos[index] && (
+                    <div className="mt-4 flex items-center justify-center gap-2 text-sm text-gray-600">
+                      <CheckCircle className="w-4 h-4 text-green-500" />
+                      {selectedVideos[index]?.name}
+                    </div>
+                  )}
                 </div>
-              ) : (
-                'Upload & Process Files'
-              )}
-            </Button>
-          </CardContent>
-        </Card>
+
+                <div>
+                  <Label htmlFor={`notes-${index}`}>Additional Notes (Optional)</Label>
+                  <Textarea
+                    id={`notes-${index}`}
+                    placeholder="Add any additional context for this question..."
+                    value={notes[index]}
+                    onChange={(e) => {
+                      const newNotes = [...notes];
+                      newNotes[index] = e.target.value;
+                      setNotes(newNotes);
+                    }}
+                    rows={3}
+                  />
+                </div>
+
+                <Button
+                  onClick={() => handleUpload(index)}
+                  disabled={!selectedVideos[index] || uploading[index]}
+                  className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+                >
+                  {processing[index] ? (
+                    <div className="flex items-center gap-2">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      Processing Video...
+                    </div>
+                  ) : (
+                    'Upload & Process Video'
+                  )}
+                </Button>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
 
         <Card>
           <CardHeader>
-            <CardTitle>Weekly Questions</CardTitle>
+            <CardTitle>Recording Tips</CardTitle>
             <CardDescription>
-              Use these questions as a guide for your video response
+              Best practices for your video submissions
             </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {PRESET_QUESTIONS.map((question, index) => (
-                <div
-                  key={index}
-                  className={`p-4 rounded-lg border-2 transition-colors cursor-pointer ${
-                    currentQuestion === index
-                      ? 'border-blue-500 bg-blue-50'
-                      : 'border-gray-200 hover:border-gray-300'
-                  }`}
-                  onClick={() => setCurrentQuestion(index)}
-                >
-                  <div className="flex items-start gap-3">
-                    <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center text-sm font-medium text-blue-600 mt-0.5">
-                      {index + 1}
-                    </div>
-                    <p className="text-sm font-medium text-gray-900">{question}</p>
+              <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-amber-600 mt-0.5" />
+                  <div className="text-sm text-amber-800">
+                    <p className="font-medium">Recording Guidelines:</p>
+                    <ul className="mt-1 space-y-1 text-xs">
+                      <li>• Keep each video under 2 minutes</li>
+                      <li>• Speak clearly and mention specific metrics</li>
+                      <li>• Include concrete examples of your impact</li>
+                      <li>• Answer each question in a separate video</li>
+                      <li>• Use the PDF upload for supporting documents</li>
+                    </ul>
                   </div>
-                </div>
-              ))}
-            </div>
-            
-            <div className="mt-6 p-4 bg-amber-50 border border-amber-200 rounded-lg">
-              <div className="flex items-start gap-2">
-                <AlertCircle className="w-4 h-4 text-amber-600 mt-0.5" />
-                <div className="text-sm text-amber-800">
-                  <p className="font-medium">Recording Tips:</p>
-                  <ul className="mt-1 space-y-1 text-xs">
-                    <li>• Keep your video under 2 minutes</li>
-                    <li>• Speak clearly and mention specific metrics</li>
-                    <li>• Include concrete examples of your impact</li>
-                    <li>• Upload supporting PDF documents if available</li>
-                  </ul>
                 </div>
               </div>
             </div>
@@ -425,7 +445,7 @@ export const VideoUpload = () => {
                         <PlayCircle className="w-5 h-5 text-blue-600" />
                         <div>
                           <h3 className="font-medium text-gray-900">
-                            {submission.video_files?.name || 'Video Submission'}
+                            {getQuestionFromSubmission(submission)}
                           </h3>
                           <p className="text-sm text-gray-500">
                             {formatDate(submission.created_at)}
