@@ -43,14 +43,14 @@ export const AuthPage = () => {
         } else {
           toast({
             title: "Account created successfully",
-            description: "Welcome to EdgeVerve Infosight!"
+            description: "Welcome to Infosight!"
           });
         }
       } else {
         await signIn(email, password);
         toast({
           title: "Signed in successfully",
-          description: "Welcome back to EdgeVerve Infosight!"
+          description: "Welcome back to Infosight!"
         });
       }
     } catch (error: any) {
@@ -193,7 +193,7 @@ export const AuthPage = () => {
         </Card>
         
         <div className="text-center mt-6">
-          <p className="text-sm text-gray-500">© 2024 EdgeVerve Systems Limited</p>
+          <p className="text-sm text-gray-500">© 2025 Infosys Limited</p>
         </div>
       </div>
     </div>
