@@ -22,10 +22,11 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
   ]);
 }
 
-// Function to clean JSON response from GPT (remove markdown formatting)
+// Enhanced function to clean JSON response from GPT (remove markdown formatting)
 function cleanJsonResponse(content: string): string {
-  // Remove markdown code blocks if present
   let cleaned = content.trim();
+  
+  // Remove markdown code blocks if present
   if (cleaned.startsWith('```json')) {
     cleaned = cleaned.replace(/^```json\s*/, '');
   }
@@ -35,7 +36,19 @@ function cleanJsonResponse(content: string): string {
   if (cleaned.endsWith('```')) {
     cleaned = cleaned.replace(/\s*```$/, '');
   }
-  return cleaned.trim();
+  
+  // Remove any leading/trailing whitespace
+  cleaned = cleaned.trim();
+  
+  // Find the first { and last } to extract just the JSON object
+  const firstBrace = cleaned.indexOf('{');
+  const lastBrace = cleaned.lastIndexOf('}');
+  
+  if (firstBrace !== -1 && lastBrace !== -1 && firstBrace < lastBrace) {
+    cleaned = cleaned.substring(firstBrace, lastBrace + 1);
+  }
+  
+  return cleaned;
 }
 
 // Enhanced function to extract text from PDF using OpenAI's document processing
@@ -320,22 +333,17 @@ EXTRACTION REQUIREMENTS:
 - Include the source context for each KPI (what it measures, time period, etc.)
 - Focus on business-relevant metrics that would be valuable for dashboard analytics
 
-Extract and format the following in JSON:
+You MUST respond with ONLY a valid JSON object. NO markdown formatting, NO code blocks, NO explanations outside the JSON. The response must be parseable by JSON.parse().
 
-1. **KEY_POINTS**: 5-7 main business achievements, goals, or important insights from ALL sources, prioritizing PDF findings
-2. **EXTRACTED_KPIS**: Extensive list of specific, measurable metrics with format "Metric Name: Value Unit" (e.g., "Revenue Q1 2024: $250,000", "Customer Satisfaction: 87%", "Conversion Rate: 12.5%", "Processing Time Reduction: 30%"). Include ALL quantifiable data found across ALL sources.
-3. **SENTIMENT**: Overall business sentiment (positive, neutral, or negative)
-4. **NOTABLE_QUOTES**: 2-4 impactful direct quotes from video transcript or key statements from PDF/notes
-
-CRITICAL: Extract ACTUAL NUMBERS and QUANTIFIABLE ACHIEVEMENTS from all sources. If the PDF contains business data, it should result in multiple KPIs being extracted.
-
-Respond ONLY with this JSON format (no markdown formatting):
+Format your response as this exact JSON structure:
 {
   "key_points": ["Achievement or insight 1", "Achievement or insight 2", "Achievement or insight 3", "Achievement or insight 4", "Achievement or insight 5"],
-  "extracted_kpis": ["Revenue Q1: $X", "Growth Rate YoY: X%", "Customer Count: X users", "Efficiency Improvement: X%", "Market Share: X%", "Conversion Rate: X%"],
-  "sentiment": "positive|neutral|negative",
+  "extracted_kpis": ["Metric Name: Value Unit", "Another Metric: Value", "Third Metric: Value%"],
+  "sentiment": "positive",
   "ai_quotes": ["Quote from video or key PDF statement 1", "Quote 2", "Quote 3"]
 }
+
+CRITICAL: Extract ACTUAL NUMBERS and QUANTIFIABLE ACHIEVEMENTS from all sources. If the PDF contains business data, it should result in multiple KPIs being extracted.
 `;
 
     console.log('Sending enhanced analysis to GPT-4o with PDF focus...');
