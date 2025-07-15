@@ -18,7 +18,7 @@ interface Submission {
   id: string;
   user_id: string;
   video_files: any;
-  pdf_file: string | null;
+  docx_file: string | null;
   notes: string | null;
   transcript: any;
   key_points: string[] | null;
@@ -35,7 +35,7 @@ interface Submission {
 export const VideoUpload = () => {
   // One video per question
   const [selectedVideos, setSelectedVideos] = useState<(File | null)[]>([null, null, null]);
-  const [selectedPDF, setSelectedPDF] = useState<File | null>(null);
+  const [selectedDOCX, setSelectedDOCX] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [processingStatus, setProcessingStatus] = useState<string>('');
@@ -44,7 +44,7 @@ export const VideoUpload = () => {
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loadingSubmissions, setLoadingSubmissions] = useState(true);
   const videoInputRefs = useRef<(HTMLInputElement | null)[]>([null, null, null]);
-  const pdfInputRef = useRef<HTMLInputElement>(null);
+  const docxInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const { user, profile } = useAuth();
 
@@ -131,31 +131,31 @@ export const VideoUpload = () => {
     }
   };
 
-  const handlePDFSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleDOCXSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      // Validate file type and size
-      if (file.type !== 'application/pdf') {
+      // Validate file type for DOCX
+      if (file.type !== 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
         toast({
           title: "Invalid file type",
-          description: "Please select a PDF file.",
+          description: "Please select a DOCX file (.docx).",
           variant: "destructive"
         });
         return;
       }
       
-      if (file.size > 50 * 1024 * 1024) { // 50MB limit for PDFs
+      if (file.size > 50 * 1024 * 1024) { // 50MB limit for DOCX
         toast({
           title: "File too large",
-          description: `PDF size is ${formatFileSize(file.size)}. Please select a PDF under 50MB.`,
+          description: `DOCX size is ${formatFileSize(file.size)}. Please select a DOCX under 50MB.`,
           variant: "destructive"
         });
         return;
       }
 
-      setSelectedPDF(file);
+      setSelectedDOCX(file);
       toast({
-        title: "PDF selected",
+        title: "DOCX selected",
         description: `File: ${file.name} (${formatFileSize(file.size)})`,
       });
     }
@@ -189,20 +189,20 @@ export const VideoUpload = () => {
     try {
       console.log('Starting batch upload process');
 
-      // Upload PDF first if selected (shared across all videos)
-      let pdfFileName = null;
-      if (selectedPDF) {
-        setProcessingStatus('Uploading PDF document...');
-        pdfFileName = `${user.id}/${Date.now()}_shared_${selectedPDF.name}`;
-        const { data: pdfUpload, error: pdfError } = await supabase.storage
+      // Upload DOCX first if selected (shared across all videos)
+      let docxFileName = null;
+      if (selectedDOCX) {
+        setProcessingStatus('Uploading DOCX document...');
+        docxFileName = `${user.id}/${Date.now()}_shared_${selectedDOCX.name}`;
+        const { data: docxUpload, error: docxError } = await supabase.storage
           .from('submissions')
-          .upload(pdfFileName, selectedPDF);
+          .upload(docxFileName, selectedDOCX);
 
-        if (pdfError) {
-          console.error('PDF upload error:', pdfError);
-          throw new Error(`PDF upload failed: ${pdfError.message}`);
+        if (docxError) {
+          console.error('DOCX upload error:', docxError);
+          throw new Error(`DOCX upload failed: ${docxError.message}`);
         }
-        console.log('PDF uploaded successfully:', pdfUpload.path);
+        console.log('DOCX uploaded successfully:', docxUpload.path);
       }
 
       // Create all submissions first (upload videos but don't process yet)
@@ -240,9 +240,9 @@ export const VideoUpload = () => {
               question_index: questionIndex,
               size: selectedVideo.size
             },
-            pdf_file: pdfFileName,
+            docx_file: docxFileName,
             notes: submissionNotes,
-            status: 'processing' // Changed from 'uploaded' to 'processing'
+            status: 'processing'
           })
           .select()
           .single();
@@ -306,20 +306,20 @@ export const VideoUpload = () => {
 
       toast({
         title: "All videos processed!",
-        description: `${submissionIds.length} video(s) have been uploaded and processed sequentially.`,
+        description: `${submissionIds.length} video(s) have been uploaded and processed with DOCX support.`,
       });
 
       // Reset form
       setSelectedVideos([null, null, null]);
-      setSelectedPDF(null);
+      setSelectedDOCX(null);
       setNotes(['', '', '']);
       
       // Clear file inputs
       videoInputRefs.current.forEach(ref => {
         if (ref) ref.value = '';
       });
-      if (pdfInputRef.current) {
-        pdfInputRef.current.value = '';
+      if (docxInputRef.current) {
+        docxInputRef.current.value = '';
       }
 
       // Reload submissions
@@ -380,39 +380,39 @@ export const VideoUpload = () => {
     <div className="space-y-6">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="space-y-6">
-          {/* Shared PDF Upload */}
+          {/* Shared DOCX Upload */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <FileText className="w-5 h-5" />
-                Supporting Document (Optional)
+                Supporting Document (DOCX - Enhanced Processing)
               </CardTitle>
               <CardDescription>
-                Upload a PDF document that supports all your video responses (Max: 50MB)
+                Upload a DOCX document with your KPIs and business metrics (Max: 50MB) - Better extraction than PDF!
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors">
                 <input
-                  ref={pdfInputRef}
+                  ref={docxInputRef}
                   type="file"
-                  accept="application/pdf"
-                  onChange={handlePDFSelect}
+                  accept=".docx"
+                  onChange={handleDOCXSelect}
                   className="hidden"
                 />
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => pdfInputRef.current?.click()}
+                  onClick={() => docxInputRef.current?.click()}
                   className="w-full"
                 >
                   <FileText className="w-4 h-4 mr-2" />
-                  Choose PDF Document
+                  Choose DOCX Document
                 </Button>
-                {selectedPDF && (
+                {selectedDOCX && (
                   <div className="mt-4 flex items-center justify-center gap-2 text-sm text-gray-600">
                     <CheckCircle className="w-4 h-4 text-green-500" />
-                    {selectedPDF.name} ({formatFileSize(selectedPDF.size)})
+                    {selectedDOCX.name} ({formatFileSize(selectedDOCX.size)})
                   </div>
                 )}
               </div>
@@ -544,7 +544,7 @@ export const VideoUpload = () => {
           <CardHeader>
             <CardTitle>Recording Tips</CardTitle>
             <CardDescription>
-              Best practices for your video submissions
+              Best practices for your video submissions with DOCX support
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -553,15 +553,16 @@ export const VideoUpload = () => {
                 <div className="flex items-start gap-2">
                   <AlertCircle className="w-4 h-4 text-amber-600 mt-0.5" />
                   <div className="text-sm text-amber-800">
-                    <p className="font-medium">Recording Guidelines:</p>
+                    <p className="font-medium">Enhanced Processing Guidelines:</p>
                     <ul className="mt-1 space-y-1 text-xs">
                       <li>• Upload one video per question (3 total)</li>
-                      <li>• Keep each video under 200MB and 25MB for processing</li>
-                      <li>• Videos processed one by one to avoid errors</li>
+                      <li>• Keep each video under 200MB</li>
+                      <li>• Use DOCX files for KPI data (better than PDF!)</li>
+                      <li>• Include tables, charts, and structured metrics in DOCX</li>
+                      <li>• Videos processed sequentially for reliability</li>
                       <li>• Speak clearly and mention specific metrics</li>
                       <li>• Include concrete examples and numbers</li>
-                      <li>• Use PDF upload for supporting documents</li>
-                      <li>• Upload all videos at once with the button below</li>
+                      <li>• Upload all files at once with the button below</li>
                     </ul>
                   </div>
                 </div>
@@ -611,10 +612,10 @@ export const VideoUpload = () => {
                       </div>
                       
                       <div className="flex items-center gap-4 text-sm text-gray-600 mb-3">
-                        {submission.pdf_file && (
+                        {submission.docx_file && (
                           <div className="flex items-center gap-1">
                             <FileImage className="w-4 h-4" />
-                            <span>PDF included</span>
+                            <span>DOCX included</span>
                           </div>
                         )}
                         {submission.notes && (
@@ -636,6 +637,20 @@ export const VideoUpload = () => {
                                 ))}
                                 {submission.key_points.length > 2 && (
                                   <li>... and {submission.key_points.length - 2} more</li>
+                                )}
+                              </ul>
+                            </div>
+                          )}
+                          
+                          {submission.extracted_kpis && submission.extracted_kpis.length > 0 && (
+                            <div>
+                              <p className="text-sm font-medium text-gray-700">Extracted KPIs:</p>
+                              <ul className="text-sm text-gray-600 list-disc list-inside ml-2">
+                                {submission.extracted_kpis.slice(0, 3).map((kpi, index) => (
+                                  <li key={index}>{kpi}</li>
+                                ))}
+                                {submission.extracted_kpis.length > 3 && (
+                                  <li>... and {submission.extracted_kpis.length - 3} more KPIs</li>
                                 )}
                               </ul>
                             </div>

@@ -51,18 +51,18 @@ function cleanJsonResponse(content: string): string {
   return cleaned;
 }
 
-// Enhanced function to extract text from PDF using OpenAI's document processing
-async function extractPDFText(pdfData: Blob, openaiApiKey: string): Promise<string> {
+// Enhanced DOCX text extraction using OpenAI
+async function extractDocxText(docxData: Blob, openaiApiKey: string): Promise<string> {
   try {
-    console.log('Starting enhanced PDF text extraction using OpenAI...');
-    console.log('PDF file size:', pdfData.size, 'bytes');
+    console.log('Starting DOCX text extraction using OpenAI...');
+    console.log('DOCX file size:', docxData.size, 'bytes');
     
-    // Convert PDF to base64 for OpenAI API
-    const arrayBuffer = await pdfData.arrayBuffer();
+    // Convert DOCX to base64 for OpenAI API
+    const arrayBuffer = await docxData.arrayBuffer();
     const uint8Array = new Uint8Array(arrayBuffer);
     const base64String = btoa(String.fromCharCode(...uint8Array));
     
-    console.log('PDF converted to base64, size:', base64String.length);
+    console.log('DOCX converted to base64, size:', base64String.length);
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -75,40 +75,41 @@ async function extractPDFText(pdfData: Blob, openaiApiKey: string): Promise<stri
         messages: [
           {
             role: 'system',
-            content: `You are an expert document processor specializing in extracting business metrics, KPIs, and quantifiable data from documents. Your task is to extract ALL text content from the provided PDF document with special emphasis on:
+            content: `You are an expert document processor specializing in extracting business metrics, KPIs, and quantifiable data from DOCX documents. Your task is to extract ALL text content from the provided DOCX document with special emphasis on:
 
-1. Revenue figures and financial data (sales, costs, profits, margins)
-2. Performance metrics and KPIs (growth rates, conversion rates, efficiency metrics)
-3. Percentages and ratios (market share, satisfaction scores, completion rates)
-4. Targets, goals, and benchmarks
-5. Dates and time periods associated with metrics
-6. Customer metrics (acquisition, retention, satisfaction)
-7. Operational metrics (productivity, quality scores, processing times)
-8. Any numerical data with context
+1. Revenue figures and financial data (sales, costs, profits, margins, budgets)
+2. Performance metrics and KPIs (growth rates, conversion rates, efficiency metrics, targets vs actuals)
+3. Percentages and ratios (market share, satisfaction scores, completion rates, adoption rates)
+4. Targets, goals, and benchmarks with their actual achievements
+5. Dates and time periods associated with metrics (Q1, Q2, monthly, yearly data)
+6. Customer metrics (acquisition, retention, satisfaction scores, feedback rates)
+7. Operational metrics (productivity, quality scores, processing times, fulfillment times)
+8. Team performance data (coverage rates, response times, innovation metrics)
+9. Any tables, charts, or structured data containing numbers with context
 
-Extract the complete text content while preserving structure and context around numbers. Focus on making quantifiable business data clearly accessible for analysis.`
+Extract the complete text content while preserving structure, especially around numerical data and KPI tables. Focus on making quantifiable business data clearly accessible for analysis.`
           },
           {
             role: 'user',
             content: [
               {
                 type: 'text',
-                text: `Please extract all text from this PDF document. Pay special attention to numerical data and business metrics. I need comprehensive extraction of:
+                text: `Please extract all text from this DOCX business document. Pay special attention to numerical data, KPIs, and business metrics. I need comprehensive extraction of:
 
-- Financial figures (revenue, costs, profits, budgets)
-- Performance indicators (KPIs, metrics, scores)
-- Percentages and growth rates
-- Targets and actual results
-- Time-based data (quarterly, monthly, yearly figures)
-- Customer and operational metrics
-- Any tables or structured data containing numbers
+- All financial figures with context (revenue, costs, profits, budgets)
+- Performance indicators and KPIs with targets vs actuals
+- Percentages, growth rates, and satisfaction scores
+- Operational metrics (times, rates, volumes, coverage)
+- Team performance data and innovation metrics
+- Any tables or structured data containing quantified business results
+- Time periods and reporting contexts (quarterly, monthly data)
 
-Extract ALL text content completely, maintaining context around numerical values:`
+Extract ALL text content completely, maintaining context around numerical values and KPI data:`
               },
               {
                 type: 'image_url',
                 image_url: {
-                  url: `data:application/pdf;base64,${base64String}`
+                  url: `data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,${base64String}`
                 }
               }
             ]
@@ -119,29 +120,29 @@ Extract ALL text content completely, maintaining context around numerical values
       }),
     });
 
-    console.log('OpenAI PDF processing response status:', response.status);
+    console.log('OpenAI DOCX processing response status:', response.status);
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('OpenAI PDF processing error:', errorText);
-      throw new Error(`OpenAI PDF processing failed: ${errorText}`);
+      console.error('OpenAI DOCX processing error:', errorText);
+      throw new Error(`OpenAI DOCX processing failed: ${errorText}`);
     }
 
     const result = await response.json();
     const extractedText = result.choices[0]?.message?.content || '';
-    console.log('PDF text extraction completed successfully');
+    console.log('DOCX text extraction completed successfully');
     console.log('Extracted text preview:', extractedText.substring(0, 800) + '...');
     console.log('Total extracted text length:', extractedText.length);
     
     if (extractedText.length < 50) {
-      console.warn('Warning: Very short text extracted from PDF. May indicate processing issue.');
+      console.warn('Warning: Very short text extracted from DOCX. May indicate processing issue.');
     }
     
     return extractedText;
     
   } catch (error) {
-    console.error('PDF text extraction failed:', error);
-    return `PDF processing error: ${error.message}. Please ensure the PDF contains readable text and is not corrupted.`;
+    console.error('DOCX text extraction failed:', error);
+    return `DOCX processing error: ${error.message}. Please ensure the DOCX contains readable text and is not corrupted.`;
   }
 }
 
@@ -178,7 +179,7 @@ serve(async (req) => {
     }
 
     console.log('Found submission:', submission.id);
-    console.log('PDF file present:', !!submission.pdf_file);
+    console.log('DOCX file present:', !!submission.docx_file);
     console.log('Video files present:', !!submission.video_files);
 
     let fullTranscript = '';
@@ -261,57 +262,57 @@ serve(async (req) => {
       throw new Error(`Video processing failed: ${error.message}`);
     }
 
-    // Enhanced PDF processing with better error handling
-    let pdfText = '';
-    let pdfProcessingSuccess = false;
+    // Enhanced DOCX processing with better error handling
+    let docxText = '';
+    let docxProcessingSuccess = false;
     
-    if (submission.pdf_file) {
+    if (submission.docx_file) {
       try {
-        console.log('Starting PDF processing for file:', submission.pdf_file);
-        const { data: pdfData, error: pdfError } = await supabase.storage
+        console.log('Starting DOCX processing for file:', submission.docx_file);
+        const { data: docxData, error: docxError } = await supabase.storage
           .from('submissions')
-          .download(submission.pdf_file);
+          .download(submission.docx_file);
 
-        if (!pdfError && pdfData) {
-          console.log('PDF downloaded successfully, size:', pdfData.size);
+        if (!docxError && docxData) {
+          console.log('DOCX downloaded successfully, size:', docxData.size);
           
-          if (pdfData.size === 0) {
-            console.error('PDF file is empty');
-            pdfText = 'PDF file appears to be empty or corrupted.';
+          if (docxData.size === 0) {
+            console.error('DOCX file is empty');
+            docxText = 'DOCX file appears to be empty or corrupted.';
           } else {
-            // Extract text from PDF using enhanced OpenAI processing
-            pdfText = await extractPDFText(pdfData, openaiApiKey);
+            // Extract text from DOCX using enhanced OpenAI processing
+            docxText = await extractDocxText(docxData, openaiApiKey);
             
-            if (pdfText && pdfText.length > 100 && !pdfText.includes('processing error')) {
-              pdfProcessingSuccess = true;
-              console.log('PDF text extracted successfully, length:', pdfText.length);
-              console.log('PDF content preview:', pdfText.substring(0, 500) + '...');
+            if (docxText && docxText.length > 100 && !docxText.includes('processing error')) {
+              docxProcessingSuccess = true;
+              console.log('DOCX text extracted successfully, length:', docxText.length);
+              console.log('DOCX content preview:', docxText.substring(0, 500) + '...');
             } else {
-              console.warn('PDF text extraction returned insufficient content');
-              console.log('Actual PDF text received:', pdfText);
+              console.warn('DOCX text extraction returned insufficient content');
+              console.log('Actual DOCX text received:', docxText);
             }
           }
         } else {
-          console.error('PDF download failed:', pdfError);
-          pdfText = `PDF download failed: ${pdfError?.message || 'Unknown error'}`;
+          console.error('DOCX download failed:', docxError);
+          docxText = `DOCX download failed: ${docxError?.message || 'Unknown error'}`;
         }
       } catch (error) {
-        console.error('Error in PDF processing:', error);
-        pdfText = `PDF processing failed: ${error.message}`;
+        console.error('Error in DOCX processing:', error);
+        docxText = `DOCX processing failed: ${error.message}`;
       }
     }
 
-    // Enhanced analysis prompt with stronger focus on PDF content and KPI extraction
+    // Enhanced analysis prompt with stronger focus on DOCX content and KPI extraction
     const analysisPrompt = `
-You are analyzing a comprehensive business submission with multiple content sources. Your PRIMARY GOAL is to extract specific, measurable KPIs and business metrics from ALL sources provided, with special emphasis on PDF content.
+You are analyzing a comprehensive business submission with multiple content sources. Your PRIMARY GOAL is to extract specific, measurable KPIs and business metrics from ALL sources provided, with special emphasis on DOCX content.
 
 CONTENT SOURCES:
 
 1. VIDEO TRANSCRIPT:
 ${fullTranscript || 'No video transcript available'}
 
-2. PDF DOCUMENT CONTENT${pdfProcessingSuccess ? ' (Successfully Extracted - PRIORITIZE THIS)' : ' (Processing Issues)'}:
-${pdfText || 'No PDF content available'}
+2. DOCX DOCUMENT CONTENT${docxProcessingSuccess ? ' (Successfully Extracted - PRIORITIZE THIS)' : ' (Processing Issues)'}:
+${docxText || 'No DOCX content available'}
 
 3. ADDITIONAL NOTES:
 ${submission.notes || 'No additional notes provided'}
@@ -320,15 +321,15 @@ CRITICAL ANALYSIS INSTRUCTIONS:
 
 You MUST extract comprehensive business metrics and insights from ALL content sources above. Focus heavily on:
 
-1. **NUMERICAL DATA EXTRACTION**: Find ALL numbers, percentages, monetary values, quantities, timeframes, and measurable metrics from video, PDF, and notes
+1. **NUMERICAL DATA EXTRACTION**: Find ALL numbers, percentages, monetary values, quantities, timeframes, and measurable metrics from video, DOCX, and notes
 2. **FINANCIAL METRICS**: Revenue, sales, costs, profits, budgets, ROI, growth rates, market share, margins
-3. **PERFORMANCE INDICATORS**: Customer metrics, conversion rates, efficiency scores, productivity measures, quality metrics
+3. **PERFORMANCE INDICATORS**: Customer metrics, conversion rates, efficiency scores, productivity measures, quality metrics, satisfaction scores, fulfillment times, response rates
 4. **COMPARATIVE DATA**: Before/after comparisons, year-over-year growth, benchmarks, targets vs. actuals, variance analysis
 5. **TIME-BASED METRICS**: Quarterly results, monthly performance, annual figures, project timelines
-6. **PDF-SPECIFIC DATA**: Pay SPECIAL attention to structured data, tables, charts, and formal reports in the PDF - these often contain the most valuable KPIs
+6. **DOCX-SPECIFIC DATA**: Pay SPECIAL attention to structured data, tables, charts, and formal reports in the DOCX - these often contain the most valuable KPIs
 
 EXTRACTION REQUIREMENTS:
-- If PDF content was successfully extracted, it should contribute SIGNIFICANTLY to your KPI findings
+- If DOCX content was successfully extracted, it should contribute SIGNIFICANTLY to your KPI findings
 - Extract EVERY quantifiable metric you can find, no matter how small
 - Include the source context for each KPI (what it measures, time period, etc.)
 - Focus on business-relevant metrics that would be valuable for dashboard analytics
@@ -338,19 +339,19 @@ You MUST respond with ONLY a valid JSON object. NO markdown formatting, NO code 
 Format your response as this exact JSON structure:
 {
   "key_points": ["Achievement or insight 1", "Achievement or insight 2", "Achievement or insight 3", "Achievement or insight 4", "Achievement or insight 5"],
-  "extracted_kpis": ["Metric Name: Value Unit", "Another Metric: Value", "Third Metric: Value%"],
+  "extracted_kpis": ["Order Fulfillment Time: 7.2 minutes", "Meal Satisfaction Score: 4.4/5", "Food Wastage Reduction: 28%", "Feedback Response Rate: 87%", "Staff Coverage Rate: 100%"],
   "sentiment": "positive",
-  "ai_quotes": ["Quote from video or key PDF statement 1", "Quote 2", "Quote 3"]
+  "ai_quotes": ["Quote from video or key DOCX statement 1", "Quote 2", "Quote 3"]
 }
 
-CRITICAL: Extract ACTUAL NUMBERS and QUANTIFIABLE ACHIEVEMENTS from all sources. If the PDF contains business data, it should result in multiple KPIs being extracted.
+CRITICAL: Extract ACTUAL NUMBERS and QUANTIFIABLE ACHIEVEMENTS from all sources. If the DOCX contains business data, it should result in multiple KPIs being extracted.
 `;
 
-    console.log('Sending enhanced analysis to GPT-4o with PDF focus...');
+    console.log('Sending enhanced analysis to GPT-4o with DOCX focus...');
     console.log('Analysis input summary:', {
       transcriptLength: fullTranscript.length,
-      pdfTextLength: pdfText.length,
-      pdfProcessed: pdfProcessingSuccess,
+      docxTextLength: docxText.length,
+      docxProcessed: docxProcessingSuccess,
       notesLength: submission.notes?.length || 0
     });
 
@@ -366,7 +367,7 @@ CRITICAL: Extract ACTUAL NUMBERS and QUANTIFIABLE ACHIEVEMENTS from all sources.
           messages: [
             {
               role: 'system',
-              content: 'You are an expert business analyst that specializes in extracting specific, measurable KPIs and metrics from various content sources including video transcripts, PDF documents, and text notes. You MUST respond with valid JSON only, without any markdown formatting or code blocks. Your primary focus is finding concrete numbers, percentages, monetary values, and quantifiable business achievements from ALL provided content sources, with special attention to PDF content which often contains the most structured and valuable data. Be thorough and extract EVERY quantifiable metric you can find.'
+              content: 'You are an expert business analyst that specializes in extracting specific, measurable KPIs and metrics from various content sources including video transcripts, DOCX documents, and text notes. You MUST respond with valid JSON only, without any markdown formatting or code blocks. Your primary focus is finding concrete numbers, percentages, monetary values, and quantifiable business achievements from ALL provided content sources, with special attention to DOCX content which often contains the most structured and valuable data. Be thorough and extract EVERY quantifiable metric you can find.'
             },
             {
               role: 'user',
@@ -426,7 +427,7 @@ CRITICAL: Extract ACTUAL NUMBERS and QUANTIFIABLE ACHIEVEMENTS from all sources.
       }
     }
 
-    // Update submission with results including enhanced PDF processing status
+    // Update submission with results including enhanced DOCX processing status
     console.log('Updating submission with enhanced results...');
     const updateData = {
       transcript: fullTranscript,
@@ -474,9 +475,9 @@ CRITICAL: Extract ACTUAL NUMBERS and QUANTIFIABLE ACHIEVEMENTS from all sources.
       console.error('Error during file deletion:', deleteError);
     }
 
-    const responseMessage = pdfProcessingSuccess 
-      ? `Submission processed successfully with enhanced PDF analysis (${analysisResult.extracted_kpis?.length || 0} KPIs extracted)`
-      : `Submission processed with video analysis and limited PDF processing (${analysisResult.extracted_kpis?.length || 0} KPIs extracted)`;
+    const responseMessage = docxProcessingSuccess 
+      ? `Submission processed successfully with enhanced DOCX analysis (${analysisResult.extracted_kpis?.length || 0} KPIs extracted)`
+      : `Submission processed with video analysis and limited DOCX processing (${analysisResult.extracted_kpis?.length || 0} KPIs extracted)`;
 
     console.log('Enhanced processing completed:', responseMessage);
 
@@ -484,11 +485,11 @@ CRITICAL: Extract ACTUAL NUMBERS and QUANTIFIABLE ACHIEVEMENTS from all sources.
       JSON.stringify({ 
         success: true, 
         message: responseMessage,
-        pdfProcessed: pdfProcessingSuccess,
+        docxProcessed: docxProcessingSuccess,
         kpisExtracted: analysisResult.extracted_kpis?.length || 0,
         videoProcessed: !!fullTranscript,
         transcriptLength: fullTranscript.length,
-        pdfContentLength: pdfText.length
+        docxContentLength: docxText.length
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
