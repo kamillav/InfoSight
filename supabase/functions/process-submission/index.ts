@@ -22,6 +22,22 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
   ]);
 }
 
+// Function to clean JSON response from GPT (remove markdown formatting)
+function cleanJsonResponse(content: string): string {
+  // Remove markdown code blocks if present
+  let cleaned = content.trim();
+  if (cleaned.startsWith('```json')) {
+    cleaned = cleaned.replace(/^```json\s*/, '');
+  }
+  if (cleaned.startsWith('```')) {
+    cleaned = cleaned.replace(/^```\s*/, '');
+  }
+  if (cleaned.endsWith('```')) {
+    cleaned = cleaned.replace(/\s*```$/, '');
+  }
+  return cleaned.trim();
+}
+
 // Enhanced function to extract text from PDF using OpenAI's document processing
 async function extractPDFText(pdfData: Blob, openaiApiKey: string): Promise<string> {
   try {
@@ -313,7 +329,7 @@ Extract and format the following in JSON:
 
 CRITICAL: Extract ACTUAL NUMBERS and QUANTIFIABLE ACHIEVEMENTS from all sources. If the PDF contains business data, it should result in multiple KPIs being extracted.
 
-Respond ONLY with this JSON format:
+Respond ONLY with this JSON format (no markdown formatting):
 {
   "key_points": ["Achievement or insight 1", "Achievement or insight 2", "Achievement or insight 3", "Achievement or insight 4", "Achievement or insight 5"],
   "extracted_kpis": ["Revenue Q1: $X", "Growth Rate YoY: X%", "Customer Count: X users", "Efficiency Improvement: X%", "Market Share: X%", "Conversion Rate: X%"],
@@ -342,7 +358,7 @@ Respond ONLY with this JSON format:
           messages: [
             {
               role: 'system',
-              content: 'You are an expert business analyst that specializes in extracting specific, measurable KPIs and metrics from various content sources including video transcripts, PDF documents, and text notes. You MUST respond with valid JSON only. Your primary focus is finding concrete numbers, percentages, monetary values, and quantifiable business achievements from ALL provided content sources, with special attention to PDF content which often contains the most structured and valuable data. Be thorough and extract EVERY quantifiable metric you can find.'
+              content: 'You are an expert business analyst that specializes in extracting specific, measurable KPIs and metrics from various content sources including video transcripts, PDF documents, and text notes. You MUST respond with valid JSON only, without any markdown formatting or code blocks. Your primary focus is finding concrete numbers, percentages, monetary values, and quantifiable business achievements from ALL provided content sources, with special attention to PDF content which often contains the most structured and valuable data. Be thorough and extract EVERY quantifiable metric you can find.'
             },
             {
               role: 'user',
@@ -374,7 +390,12 @@ Respond ONLY with this JSON format:
         const content = gptResponse.choices[0]?.message?.content;
         if (content) {
           console.log('Raw GPT response content:', content);
-          analysisResult = JSON.parse(content);
+          
+          // Clean the JSON response to remove any markdown formatting
+          const cleanedContent = cleanJsonResponse(content);
+          console.log('Cleaned content for parsing:', cleanedContent);
+          
+          analysisResult = JSON.parse(cleanedContent);
           console.log('Enhanced analysis completed successfully:', {
             keyPointsCount: analysisResult.key_points?.length || 0,
             kpisCount: analysisResult.extracted_kpis?.length || 0,
@@ -392,7 +413,7 @@ Respond ONLY with this JSON format:
         }
       } catch (parseError) {
         console.error('Error parsing GPT response:', parseError);
-        console.log('Raw content that failed to parse:', gptResponse.choices[0]?.message?.content);
+        console.log('Raw content that failed to parse:', content);
         console.warn('Using default analysis result due to parsing error');
       }
     }
