@@ -121,15 +121,8 @@ export const AdminView = () => {
       return;
     }
 
-    // Type assertion to handle the complex nested type
-    const typedData = data as (UserSubmission & {
-      profiles: {
-        name: string;
-        email: string;
-      } | null;
-    })[];
-
-    setSubmissions(typedData || []);
+    // Simply cast the data without complex type assertions
+    setSubmissions((data as any) || []);
   };
 
   const fetchUsers = async () => {

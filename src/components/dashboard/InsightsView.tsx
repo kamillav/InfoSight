@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -19,9 +18,9 @@ interface Submission {
   transcript: Json | null;
   key_points: string[] | null;
   extracted_kpis: string[] | null;
-  sentiment: 'positive' | 'neutral' | 'negative' | null;
+  sentiment: string | null;
   ai_quotes: string[] | null;
-  status: 'processing' | 'completed' | 'failed';
+  status: string;
   processing_error?: string | null;
 }
 
@@ -56,7 +55,7 @@ export const InsightsView = ({ userId }: InsightsViewProps) => {
         }
 
         console.log('Fetched submissions:', data);
-        setSubmissions(data || []);
+        setSubmissions((data as Submission[]) || []);
       } catch (error) {
         console.error('Error fetching submissions:', error);
         toast({
