@@ -42,8 +42,8 @@ export const DashboardHeader = () => {
               <Zap className="w-6 h-6 text-white" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">EdgeVerve</h1>
-              <p className="text-sm font-medium text-blue-600">Infosight Analytics Platform</p>
+              <h1 className="text-2xl font-bold text-gray-900">Infosight</h1>
+              <p className="text-sm font-medium text-blue-600">Infosys Analytics Platform</p>
             </div>
           </div>
 

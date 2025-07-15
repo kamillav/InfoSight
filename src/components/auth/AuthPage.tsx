@@ -94,7 +94,7 @@ export const AuthPage = () => {
         <Card className="shadow-2xl border-0 bg-white/90 backdrop-blur-sm">
           <CardHeader className="text-center pb-4">
             <CardTitle className="text-2xl text-gray-900">
-              {isSignUp ? 'Join EdgeVerve' : 'Welcome Back'}
+              {isSignUp ? 'Join Infosight' : 'Welcome Back'}
             </CardTitle>
             <CardDescription className="text-gray-600">
               {isSignUp 
