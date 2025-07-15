@@ -55,16 +55,10 @@ export const AdminDashboard = () => {
 
   const fetchDashboardData = async () => {
     try {
-      // Fetch all submissions with user profiles
+      // Fetch all submissions first
       const { data: submissionsData, error: submissionsError } = await supabase
         .from('submissions')
-        .select(`
-          *,
-          profiles (
-            name,
-            email
-          )
-        `)
+        .select('*')
         .eq('status', 'completed')
         .order('created_at', { ascending: false });
 
@@ -78,21 +72,30 @@ export const AdminDashboard = () => {
 
       if (usersError) throw usersError;
 
-      // Type cast the submissions data to match our interface
-      const typedSubmissions: UserSubmission[] = (submissionsData || []).map(submission => ({
-        id: submission.id,
-        user_id: submission.user_id,
-        created_at: submission.created_at,
-        status: submission.status,
-        sentiment: submission.sentiment,
-        key_points: submission.key_points,
-        extracted_kpis: submission.extracted_kpis,
-        ai_quotes: submission.ai_quotes,
-        profiles: submission.profiles ? {
-          name: submission.profiles.name,
-          email: submission.profiles.email
-        } : null
-      }));
+      // Create a map of user IDs to user profiles for easy lookup
+      const userMap = new Map<string, UserProfile>();
+      (usersData || []).forEach(user => {
+        userMap.set(user.id, user);
+      });
+
+      // Type cast the submissions data and manually join with profiles
+      const typedSubmissions: UserSubmission[] = (submissionsData || []).map(submission => {
+        const userProfile = userMap.get(submission.user_id);
+        return {
+          id: submission.id,
+          user_id: submission.user_id,
+          created_at: submission.created_at,
+          status: submission.status,
+          sentiment: submission.sentiment,
+          key_points: submission.key_points,
+          extracted_kpis: submission.extracted_kpis,
+          ai_quotes: submission.ai_quotes,
+          profiles: userProfile ? {
+            name: userProfile.name,
+            email: userProfile.email
+          } : null
+        };
+      });
 
       setSubmissions(typedSubmissions);
       setUsers(usersData || []);
