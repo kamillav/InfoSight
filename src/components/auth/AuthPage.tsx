@@ -85,8 +85,8 @@ export const AuthPage = () => {
           <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-2xl mb-4 shadow-lg">
             <Zap className="w-10 h-10 text-white" />
           </div>
-          <h1 className="text-4xl font-bold text-gray-900 mb-2">EdgeVerve</h1>
-          <p className="text-lg font-medium text-blue-600 mb-1">Infosight</p>
+          <h1 className="text-4xl font-bold text-gray-900 mb-2">InfoSight</h1>
+          <p className="text-lg font-medium text-blue-600 mb-1">by Edgeverve</p>
           <p className="text-gray-600">Intelligent Analytics Platform</p>
           <div className="w-16 h-1 bg-gradient-to-r from-blue-600 to-indigo-600 mx-auto mt-4 rounded-full"></div>
         </div>
