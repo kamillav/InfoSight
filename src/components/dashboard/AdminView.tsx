@@ -53,15 +53,35 @@ interface UserProfile {
   email: string;
 }
 
+// Predefined colors for consistent user identification
+const USER_COLORS = [
+  '#3b82f6', // blue
+  '#ef4444', // red
+  '#22c55e', // green
+  '#f59e0b', // amber
+  '#8b5cf6', // violet
+  '#06b6d4', // cyan
+  '#ec4899', // pink
+  '#10b981', // emerald
+  '#f97316', // orange
+  '#6366f1', // indigo
+  '#84cc16', // lime
+  '#f43f5e', // rose
+  '#14b8a6', // teal
+  '#a855f7', // purple
+  '#eab308', // yellow
+];
+
 export const AdminView = () => {
   const [kpis, setKpis] = useState<KPIDefinition[]>([]);
   const [submissions, setSubmissions] = useState<UserSubmission[]>([]);
   const [users, setUsers] = useState<UserProfile[]>([]);
-  const [extractedKPIs, setExtractedKPIs] = useState<{kpi: string, count: number, submissions: string[]}[]>([]);
+  const [extractedKPIs, setExtractedKPIs] = useState<{kpi: string, count: number, submissions: string[], userBreakdown: Record<string, number>}[]>([]);
   const [loading, setLoading] = useState(true);
   const [isKPIDialogOpen, setIsKPIDialogOpen] = useState(false);
   const [editingKPI, setEditingKPI] = useState<KPIDefinition | null>(null);
   const [selectedUser, setSelectedUser] = useState<string>('all');
+  const [userColors, setUserColors] = useState<Record<string, string>>({});
   const { toast } = useToast();
   const { user } = useAuth();
 
@@ -146,7 +166,26 @@ export const AdminView = () => {
   };
 
   const fetchSubmissions = async () => {
-    // Fetch all submissions first
+    // First fetch users to create a lookup map
+    const { data: usersData, error: usersError } = await supabase
+      .from('profiles')
+      .select('*');
+
+    if (usersError) {
+      console.error('Error fetching users for submissions:', usersError);
+      return;
+    }
+
+    // Create user lookup map and assign colors
+    const userMap = new Map<string, UserProfile>();
+    const colors: Record<string, string> = {};
+    (usersData || []).forEach((user, index) => {
+      userMap.set(user.id, user);
+      colors[user.id] = USER_COLORS[index % USER_COLORS.length];
+    });
+    setUserColors(colors);
+
+    // Now fetch submissions
     const { data: submissionsData, error: submissionsError } = await supabase
       .from('submissions')
       .select('*')
@@ -157,23 +196,7 @@ export const AdminView = () => {
       return;
     }
 
-    // Fetch all users
-    const { data: usersData, error: usersError } = await supabase
-      .from('profiles')
-      .select('*');
-
-    if (usersError) {
-      console.error('Error fetching users for submissions:', usersError);
-      return;
-    }
-
-    // Create a map of user IDs to user profiles for easy lookup
-    const userMap = new Map<string, UserProfile>();
-    (usersData || []).forEach(user => {
-      userMap.set(user.id, user);
-    });
-
-    // Manually join submissions with profiles
+    // Manually join submissions with profiles using the lookup map
     const typedSubmissions: UserSubmission[] = (submissionsData || []).map(submission => {
       const userProfile = userMap.get(submission.user_id);
       return {
@@ -196,11 +219,12 @@ export const AdminView = () => {
 
     setSubmissions(typedSubmissions);
     
-    // Process extracted KPIs with enhanced integration
-    const kpiMap = new Map<string, {count: number, submissions: string[]}>();
+    // Process extracted KPIs with enhanced integration and user breakdown
+    const kpiMap = new Map<string, {count: number, submissions: string[], userBreakdown: Record<string, number>}>();
     
     typedSubmissions.forEach((submission: UserSubmission) => {
       if (submission.extracted_kpis && submission.status === 'completed') {
+        const userEmail = submission.profiles?.email || 'Unknown User';
         submission.extracted_kpis.forEach((kpi: string) => {
           // Clean and normalize KPI names for better matching
           const cleanKpi = kpi.trim();
@@ -208,15 +232,25 @@ export const AdminView = () => {
             const existing = kpiMap.get(cleanKpi)!;
             existing.count += 1;
             existing.submissions.push(submission.id);
+            existing.userBreakdown[userEmail] = (existing.userBreakdown[userEmail] || 0) + 1;
           } else {
-            kpiMap.set(cleanKpi, { count: 1, submissions: [submission.id] });
+            kpiMap.set(cleanKpi, { 
+              count: 1, 
+              submissions: [submission.id],
+              userBreakdown: { [userEmail]: 1 }
+            });
           }
         });
       }
     });
 
     const extractedKPIArray = Array.from(kpiMap.entries())
-      .map(([kpi, data]) => ({ kpi, count: data.count, submissions: data.submissions }))
+      .map(([kpi, data]) => ({ 
+        kpi, 
+        count: data.count, 
+        submissions: data.submissions,
+        userBreakdown: data.userBreakdown
+      }))
       .sort((a, b) => b.count - a.count);
 
     setExtractedKPIs(extractedKPIArray);
@@ -394,6 +428,10 @@ export const AdminView = () => {
     }
   };
 
+  const getUserColor = (userId: string) => {
+    return userColors[userId] || '#6b7280';
+  };
+
   const filteredSubmissions = selectedUser === 'all' 
     ? submissions 
     : submissions.filter(s => s.user_id === selectedUser);
@@ -401,16 +439,25 @@ export const AdminView = () => {
   const completedSubmissions = filteredSubmissions.filter(s => s.status === 'completed');
   const positiveSubmissions = completedSubmissions.filter(s => s.sentiment === 'positive');
 
-  // Generate analytics data with integrated KPIs from dashboard
-  const kpiMentions = completedSubmissions.reduce((acc: Record<string, number>, submission) => {
+  // Generate analytics data with integrated KPIs from dashboard with user colors
+  const kpiMentions = completedSubmissions.reduce((acc: Record<string, {count: number, userBreakdown: Record<string, number>}>, submission) => {
+    const userEmail = submission.profiles?.email || 'Unknown User';
     (submission.extracted_kpis || []).forEach(kpi => {
-      acc[kpi] = (acc[kpi] || 0) + 1;
+      if (!acc[kpi]) {
+        acc[kpi] = { count: 0, userBreakdown: {} };
+      }
+      acc[kpi].count += 1;
+      acc[kpi].userBreakdown[userEmail] = (acc[kpi].userBreakdown[userEmail] || 0) + 1;
     });
     return acc;
   }, {});
 
   const topKPIs = Object.entries(kpiMentions)
-    .map(([name, count]) => ({ name, count }))
+    .map(([name, data]) => ({ 
+      name, 
+      count: data.count,
+      userBreakdown: data.userBreakdown
+    }))
     .sort((a, b) => b.count - a.count)
     .slice(0, 15); // Show more KPIs
 
@@ -541,13 +588,13 @@ export const AdminView = () => {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Target className="w-5 h-5" />
-                  Top KPIs Across All Submissions
+                  Top KPIs Across All Submissions (Color-Coded by User)
                 </CardTitle>
-                <CardDescription>Most frequently mentioned business metrics with real-time updates</CardDescription>
+                <CardDescription>Most frequently mentioned business metrics with user breakdown and real-time updates</CardDescription>
               </CardHeader>
               <CardContent>
                 {topKPIs.length > 0 ? (
-                  <KPIChart data={topKPIs} />
+                  <KPIChart data={topKPIs} userColors={userColors} />
                 ) : (
                   <p className="text-gray-500 text-center py-8">No KPI data available yet</p>
                 )}
@@ -593,7 +640,13 @@ export const AdminView = () => {
                 <div className="space-y-4">
                   {completedSubmissions.slice(0, 5).map((submission, index) => (
                     <div key={index} className="border-l-4 border-blue-500 pl-4">
-                      <p className="text-sm font-medium">{submission.profiles?.name || 'Unknown User'}</p>
+                      <div className="flex items-center gap-2">
+                        <div 
+                          className="w-3 h-3 rounded-full"
+                          style={{ backgroundColor: getUserColor(submission.user_id) }}
+                        />
+                        <p className="text-sm font-medium">{submission.profiles?.name || 'Unknown User'}</p>
+                      </div>
                       <p className="text-xs text-gray-500">{new Date(submission.created_at).toLocaleDateString()}</p>
                       <p className="text-sm text-gray-700 mt-1">
                         {submission.key_points?.length || 0} insights • {submission.extracted_kpis?.length || 0} KPIs
@@ -619,7 +672,7 @@ export const AdminView = () => {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Lightbulb className="w-5 h-5" />
-                AI Extracted KPIs from User Submissions
+                AI Extracted KPIs from User Submissions (Color-Coded by User)
                 <Button
                   size="sm"
                   variant="outline"
@@ -631,7 +684,7 @@ export const AdminView = () => {
                 </Button>
               </CardTitle>
               <CardDescription>
-                Review KPIs extracted by AI from user videos to potentially add them as official metrics (Auto-updates with new submissions)
+                Review KPIs extracted by AI from user videos with user breakdown (Auto-updates with new submissions)
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -647,8 +700,25 @@ export const AdminView = () => {
                         <div className="flex-1">
                           <h3 className="font-medium text-gray-900">{item.kpi}</h3>
                           <p className="text-sm text-gray-600 mt-1">
-                            Mentioned in {item.count} submission{item.count > 1 ? 's' : ''} • Found in {item.submissions.length} unique context{item.submissions.length > 1 ? 's' : ''}
+                            Mentioned {item.count} time{item.count > 1 ? 's' : ''} across {item.submissions.length} submission{item.submissions.length > 1 ? 's' : ''}
                           </p>
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            {Object.entries(item.userBreakdown).map(([userEmail, count]) => {
+                              const user = users.find(u => u.email === userEmail);
+                              const userId = user?.id;
+                              return (
+                                <div key={userEmail} className="flex items-center gap-1">
+                                  <div 
+                                    className="w-3 h-3 rounded-full"
+                                    style={{ backgroundColor: userId ? getUserColor(userId) : '#6b7280' }}
+                                  />
+                                  <span className="text-xs text-gray-600">
+                                    {user?.name || userEmail}: {count}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
                         </div>
                         <div className="flex items-center gap-2">
                           <Badge variant="secondary">{item.count}x</Badge>
@@ -896,9 +966,15 @@ export const AdminView = () => {
                   {submissions.map((submission) => (
                     <TableRow key={submission.id}>
                       <TableCell>
-                        <div>
-                          <p className="font-medium">{submission.profiles?.name || 'Unknown'}</p>
-                          <p className="text-sm text-gray-600">{submission.profiles?.email}</p>
+                        <div className="flex items-center gap-2">
+                          <div 
+                            className="w-3 h-3 rounded-full"
+                            style={{ backgroundColor: getUserColor(submission.user_id) }}
+                          />
+                          <div>
+                            <p className="font-medium">{submission.profiles?.name || 'Unknown User'}</p>
+                            <p className="text-sm text-gray-600">{submission.profiles?.email}</p>
+                          </div>
                         </div>
                       </TableCell>
                       <TableCell>{new Date(submission.created_at).toLocaleDateString()}</TableCell>
