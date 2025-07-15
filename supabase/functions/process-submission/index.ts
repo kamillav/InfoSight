@@ -51,109 +51,78 @@ function cleanJsonResponse(content: string): string {
   return cleaned;
 }
 
-// Simple DOCX text extraction function
+// Improved DOCX text extraction using OpenAI directly
 async function extractDocxText(docxData: Blob): Promise<string> {
   try {
-    console.log('Starting DOCX text extraction...');
+    console.log('Starting improved DOCX text extraction...');
     console.log('DOCX file size:', docxData.size, 'bytes');
     
-    // For now, we'll use a placeholder approach since DOCX parsing is complex
-    // In a production environment, you might want to:
-    // 1. Use a DOCX parsing library
-    // 2. Convert DOCX to plain text server-side
-    // 3. Use a dedicated document processing service
-    
-    // Convert DOCX to base64 and use OpenAI's text completion to ask for help
+    // Convert DOCX to base64 for OpenAI processing
     const arrayBuffer = await docxData.arrayBuffer();
     const uint8Array = new Uint8Array(arrayBuffer);
     
-    // Try to extract any readable text from the DOCX binary
-    let extractedText = '';
-    try {
-      // Look for XML content in the DOCX (which is actually a ZIP file containing XML)
-      const textDecoder = new TextDecoder('utf-8', { fatal: false });
-      const decoded = textDecoder.decode(uint8Array);
-      
-      // Try to find XML content that might contain text
-      const xmlMatches = decoded.match(/<w:t[^>]*>([^<]+)<\/w:t>/g);
-      if (xmlMatches) {
-        extractedText = xmlMatches
-          .map(match => match.replace(/<w:t[^>]*>([^<]+)<\/w:t>/, '$1'))
-          .join(' ')
-          .trim();
-      }
-      
-      // If no XML text found, try to find any readable text
-      if (!extractedText) {
-        const readableText = decoded.replace(/[^\x20-\x7E\n\r\t]/g, ' ')
-          .replace(/\s+/g, ' ')
-          .trim();
-        
-        // Extract meaningful text (more than just random characters)
-        const words = readableText.split(' ').filter(word => 
-          word.length > 2 && /^[a-zA-Z0-9\-\.\,\!\?\%\$]+$/.test(word)
-        );
-        
-        if (words.length > 10) {
-          extractedText = words.slice(0, 200).join(' '); // Limit to first 200 words
-        }
-      }
-    } catch (decodeError) {
-      console.log('Direct text extraction from DOCX binary failed:', decodeError.message);
+    // Use only first 50KB to stay within reasonable limits
+    const maxSize = Math.min(50000, uint8Array.length);
+    const truncatedData = uint8Array.slice(0, maxSize);
+    const base64String = btoa(String.fromCharCode(...truncatedData));
+    
+    console.log('Sending DOCX to OpenAI for intelligent text extraction...');
+    
+    // Use OpenAI to intelligently extract text from the DOCX
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${openaiApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o',
+        messages: [
+          {
+            role: 'system',
+            content: `You are a document processing expert. I will provide you with a base64-encoded portion of a DOCX file. Your task is to:
+
+1. Analyze the binary data and extract any readable text content
+2. Focus on finding business metrics, KPIs, numbers, financial data, percentages, and quantifiable information
+3. Look for structured data like tables, lists, and formatted content
+4. Return the extracted text in a clean, readable format
+5. If you find any business metrics or KPIs, preserve them exactly as they appear
+
+Please extract all readable text content from this DOCX file, focusing especially on numerical data and business metrics:`
+          },
+          {
+            role: 'user',
+            content: `Please extract readable text from this DOCX file data: ${base64String}`
+          }
+        ],
+        max_tokens: 2000,
+        temperature: 0.1,
+      }),
+    });
+
+    console.log('OpenAI DOCX processing response status:', response.status);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('OpenAI DOCX processing error:', errorText);
+      throw new Error(`OpenAI DOCX processing failed: ${errorText}`);
     }
+
+    const result = await response.json();
+    const extractedText = result.choices[0]?.message?.content || '';
     
     if (extractedText && extractedText.length > 50) {
-      console.log('Successfully extracted text from DOCX:', extractedText.length, 'characters');
-      console.log('Sample extracted text:', extractedText.substring(0, 200) + '...');
+      console.log('DOCX text successfully extracted via OpenAI:', extractedText.length, 'characters');
+      console.log('Sample extracted content:', extractedText.substring(0, 500) + '...');
       return extractedText;
     } else {
-      console.log('Limited text extraction from DOCX. Using OpenAI for assistance...');
-      
-      // Fallback: Use OpenAI to help extract meaningful information
-      const base64String = btoa(String.fromCharCode(...uint8Array.slice(0, 4000))); // First 4KB only
-      
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${openaiApiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'gpt-4o',
-          messages: [
-            {
-              role: 'system',
-              content: `You are a document analysis expert. I will provide you with a partial base64 representation of a DOCX file. Based on the binary patterns and any readable text you can identify, please extract or infer what business metrics, KPIs, numbers, or key information this document likely contains. Focus on quantifiable business data, performance metrics, financial figures, percentages, dates, and any structured information that would be valuable for business analysis.`
-            },
-            {
-              role: 'user',
-              content: `Please analyze this partial DOCX file data and extract/infer key business information, metrics, and KPIs that might be contained within: ${base64String}`
-            }
-          ],
-          max_tokens: 1000,
-          temperature: 0.1,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('OpenAI text analysis error:', errorText);
-        return `DOCX processing: Could not extract text directly. File size: ${docxData.size} bytes. Please ensure the DOCX contains readable text and is not corrupted.`;
-      }
-
-      const result = await response.json();
-      const analyzedContent = result.choices[0]?.message?.content || '';
-      
-      if (analyzedContent) {
-        console.log('OpenAI document analysis completed');
-        return `DOCX Analysis: ${analyzedContent}`;
-      } else {
-        return `DOCX processing: File received (${docxData.size} bytes) but content extraction was limited. Please ensure the document contains clear business metrics and KPIs.`;
-      }
+      console.warn('OpenAI DOCX extraction returned minimal content');
+      return `DOCX processing: Limited text extraction. File size: ${docxData.size} bytes. Please ensure the document contains clear business metrics and readable text.`;
     }
+    
   } catch (error) {
-    console.error('DOCX text extraction failed:', error);
-    return `DOCX processing error: ${error.message}. Please ensure the DOCX contains readable text and is not corrupted.`;
+    console.error('DOCX text extraction error:', error);
+    return `DOCX processing error: ${error.message}. File size: ${docxData.size} bytes.`;
   }
 }
 
@@ -273,13 +242,13 @@ serve(async (req) => {
       throw new Error(`Video processing failed: ${error.message}`);
     }
 
-    // Enhanced DOCX processing with better error handling
+    // Improved DOCX processing with better text extraction
     let docxText = '';
     let docxProcessingSuccess = false;
     
     if (submission.docx_file) {
       try {
-        console.log('Starting DOCX processing for file:', submission.docx_file);
+        console.log('Starting enhanced DOCX processing for file:', submission.docx_file);
         const { data: docxData, error: docxError } = await supabase.storage
           .from('submissions')
           .download(submission.docx_file);
@@ -291,15 +260,15 @@ serve(async (req) => {
             console.error('DOCX file is empty');
             docxText = 'DOCX file appears to be empty or corrupted.';
           } else {
-            // Extract text from DOCX using the updated approach
+            // Extract text from DOCX using the improved OpenAI approach
             docxText = await extractDocxText(docxData);
             
-            if (docxText && docxText.length > 100 && !docxText.includes('processing error')) {
+            if (docxText && docxText.length > 200 && !docxText.includes('processing error') && !docxText.includes('Limited text extraction')) {
               docxProcessingSuccess = true;
-              console.log('DOCX text extracted successfully, length:', docxText.length);
-              console.log('DOCX content preview:', docxText.substring(0, 500) + '...');
+              console.log('DOCX text extracted successfully via OpenAI, length:', docxText.length);
+              console.log('DOCX content preview:', docxText.substring(0, 300) + '...');
             } else {
-              console.warn('DOCX text extraction returned insufficient content');
+              console.warn('DOCX text extraction returned insufficient or error content');
               console.log('Actual DOCX text received:', docxText);
             }
           }
@@ -308,21 +277,21 @@ serve(async (req) => {
           docxText = `DOCX download failed: ${docxError?.message || 'Unknown error'}`;
         }
       } catch (error) {
-        console.error('Error in DOCX processing:', error);
+        console.error('Error in enhanced DOCX processing:', error);
         docxText = `DOCX processing failed: ${error.message}`;
       }
     }
 
-    // Enhanced analysis prompt with stronger focus on DOCX content and KPI extraction
+    // Enhanced analysis prompt with even stronger focus on KPI extraction
     const analysisPrompt = `
-You are analyzing a comprehensive business submission with multiple content sources. Your PRIMARY GOAL is to extract specific, measurable KPIs and business metrics from ALL sources provided, with special emphasis on DOCX content.
+You are analyzing a comprehensive business submission with multiple content sources. Your PRIMARY GOAL is to extract specific, measurable KPIs and business metrics from ALL sources provided.
 
 CONTENT SOURCES:
 
 1. VIDEO TRANSCRIPT:
 ${fullTranscript || 'No video transcript available'}
 
-2. DOCX DOCUMENT CONTENT${docxProcessingSuccess ? ' (Successfully Extracted - PRIORITIZE THIS)' : ' (Processing Issues)'}:
+2. DOCX DOCUMENT CONTENT${docxProcessingSuccess ? ' (Successfully Extracted via AI - PRIORITIZE THIS CONTENT)' : ' (Processing Issues)'}:
 ${docxText || 'No DOCX content available'}
 
 3. ADDITIONAL NOTES:
@@ -332,33 +301,34 @@ CRITICAL ANALYSIS INSTRUCTIONS:
 
 You MUST extract comprehensive business metrics and insights from ALL content sources above. Focus heavily on:
 
-1. **NUMERICAL DATA EXTRACTION**: Find ALL numbers, percentages, monetary values, quantities, timeframes, and measurable metrics from video, DOCX, and notes
-2. **FINANCIAL METRICS**: Revenue, sales, costs, profits, budgets, ROI, growth rates, market share, margins
-3. **PERFORMANCE INDICATORS**: Customer metrics, conversion rates, efficiency scores, productivity measures, quality metrics, satisfaction scores, fulfillment times, response rates
+1. **NUMERICAL DATA EXTRACTION**: Find ALL numbers, percentages, monetary values, quantities, timeframes, and measurable metrics
+2. **FINANCIAL METRICS**: Revenue, sales, costs, profits, budgets, ROI, growth rates, market share, margins, targets
+3. **PERFORMANCE INDICATORS**: Customer metrics, conversion rates, efficiency scores, productivity measures, quality metrics, satisfaction scores, completion rates, response times
 4. **COMPARATIVE DATA**: Before/after comparisons, year-over-year growth, benchmarks, targets vs. actuals, variance analysis
-5. **TIME-BASED METRICS**: Quarterly results, monthly performance, annual figures, project timelines
-6. **DOCX-SPECIFIC DATA**: Pay SPECIAL attention to structured data, tables, charts, and formal reports in the DOCX - these often contain the most valuable KPIs
+5. **TIME-BASED METRICS**: Quarterly results, monthly performance, annual figures, project timelines, deadlines
+6. **OPERATIONAL METRICS**: Process improvements, cost savings, time reductions, quality improvements, customer feedback scores
 
 EXTRACTION REQUIREMENTS:
-- If DOCX content was successfully extracted, it should contribute SIGNIFICANTLY to your KPI findings
 - Extract EVERY quantifiable metric you can find, no matter how small
 - Include the source context for each KPI (what it measures, time period, etc.)
 - Focus on business-relevant metrics that would be valuable for dashboard analytics
+- If you see any numbers, percentages, or measurable achievements, extract them as KPIs
+- Even simple metrics like "completed 3 tasks" should become "Tasks Completed: 3"
 
-You MUST respond with ONLY a valid JSON object. NO markdown formatting, NO code blocks, NO explanations outside the JSON. The response must be parseable by JSON.parse().
+You MUST respond with ONLY a valid JSON object. NO markdown formatting, NO code blocks, NO explanations outside the JSON.
 
 Format your response as this exact JSON structure:
 {
-  "key_points": ["Achievement or insight 1", "Achievement or insight 2", "Achievement or insight 3", "Achievement or insight 4", "Achievement or insight 5"],
-  "extracted_kpis": ["Order Fulfillment Time: 7.2 minutes", "Meal Satisfaction Score: 4.4/5", "Food Wastage Reduction: 28%", "Feedback Response Rate: 87%", "Staff Coverage Rate: 100%"],
-  "sentiment": "positive",
-  "ai_quotes": ["Quote from video or key DOCX statement 1", "Quote 2", "Quote 3"]
+  "key_points": ["Specific achievement or insight 1", "Specific achievement or insight 2", "Specific achievement or insight 3", "Specific achievement or insight 4", "Specific achievement or insight 5"],
+  "extracted_kpis": ["Metric Name: Specific Value with Units", "Another Metric: Quantified Result", "Performance Indicator: Measured Outcome", "Business Metric: Actual Number", "Achievement Metric: Concrete Result"],
+  "sentiment": "positive|negative|neutral",
+  "ai_quotes": ["Relevant quote from video or DOCX 1", "Important statement 2", "Key insight 3"]
 }
 
-CRITICAL: Extract ACTUAL NUMBERS and QUANTIFIABLE ACHIEVEMENTS from all sources. If the DOCX contains business data, it should result in multiple KPIs being extracted.
+CRITICAL: Extract ACTUAL NUMBERS and QUANTIFIABLE ACHIEVEMENTS. If there are any metrics, percentages, or measurable outcomes mentioned in any of the content sources, they MUST be extracted as KPIs. DO NOT return empty arrays unless there are truly no quantifiable metrics in the content.
 `;
 
-    console.log('Sending enhanced analysis to GPT-4o with improved DOCX focus...');
+    console.log('Sending enhanced analysis to GPT-4o with improved DOCX content...');
     console.log('Analysis input summary:', {
       transcriptLength: fullTranscript.length,
       docxTextLength: docxText.length,
@@ -378,7 +348,7 @@ CRITICAL: Extract ACTUAL NUMBERS and QUANTIFIABLE ACHIEVEMENTS from all sources.
           messages: [
             {
               role: 'system',
-              content: 'You are an expert business analyst that specializes in extracting specific, measurable KPIs and metrics from various content sources including video transcripts, DOCX documents, and text notes. You MUST respond with valid JSON only, without any markdown formatting or code blocks. Your primary focus is finding concrete numbers, percentages, monetary values, and quantifiable business achievements from ALL provided content sources, with special attention to DOCX content which often contains the most structured and valuable data. Be thorough and extract EVERY quantifiable metric you can find.'
+              content: 'You are an expert business analyst that specializes in extracting specific, measurable KPIs and metrics from various content sources including video transcripts, DOCX documents, and text notes. You MUST respond with valid JSON only, without any markdown formatting or code blocks. Your primary focus is finding concrete numbers, percentages, monetary values, and quantifiable business achievements from ALL provided content sources. You should extract EVERY quantifiable metric you find, no matter how small. Be thorough and aggressive in finding metrics - even simple accomplishments should be quantified.'
             },
             {
               role: 'user',
@@ -424,7 +394,7 @@ CRITICAL: Extract ACTUAL NUMBERS and QUANTIFIABLE ACHIEVEMENTS from all sources.
           });
           
           if (analysisResult.extracted_kpis?.length > 0) {
-            console.log('Sample extracted KPIs:', analysisResult.extracted_kpis.slice(0, 5));
+            console.log('Extracted KPIs:', analysisResult.extracted_kpis);
           } else {
             console.warn('WARNING: No KPIs were extracted from the content!');
           }
@@ -487,7 +457,7 @@ CRITICAL: Extract ACTUAL NUMBERS and QUANTIFIABLE ACHIEVEMENTS from all sources.
     }
 
     const responseMessage = docxProcessingSuccess 
-      ? `Submission processed successfully with enhanced DOCX analysis (${analysisResult.extracted_kpis?.length || 0} KPIs extracted)`
+      ? `Submission processed successfully with AI-powered DOCX analysis (${analysisResult.extracted_kpis?.length || 0} KPIs extracted)`
       : `Submission processed with video analysis and limited DOCX processing (${analysisResult.extracted_kpis?.length || 0} KPIs extracted)`;
 
     console.log('Enhanced processing completed:', responseMessage);
