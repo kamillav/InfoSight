@@ -12,7 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { WordCloudChart } from './charts/WordCloudChart';
 import { KPIChart } from './charts/KPIChart';
 import { SentimentChart } from './charts/SentimentChart';
-import { Users, TrendingUp, MessageSquare, BarChart3, Plus, Edit, Trash2, Target, Lightbulb } from 'lucide-react';
+import { AdminDashboard } from './AdminDashboard';
+import { Users, TrendingUp, MessageSquare, BarChart3, Plus, Edit, Trash2, Target, Lightbulb, PieChart } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
@@ -39,7 +40,7 @@ interface UserSubmission {
   extracted_kpis?: string[] | null;
   ai_quotes?: string[] | null;
   video_files: Json;
-  pdf_file?: string | null;
+  docx_file?: string | null;
   profiles?: {
     name: string;
     email: string;
@@ -404,14 +405,22 @@ export const AdminView = () => {
         </Card>
       </div>
 
-      <Tabs defaultValue="overview" className="w-full">
-        <TabsList className="grid w-full grid-cols-5">
+      <Tabs defaultValue="dashboard" className="w-full">
+        <TabsList className="grid w-full grid-cols-6">
+          <TabsTrigger value="dashboard">
+            <PieChart className="w-4 h-4 mr-2" />
+            Dashboard
+          </TabsTrigger>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="extracted-kpis">AI Extracted KPIs</TabsTrigger>
           <TabsTrigger value="kpi-management">KPI Management</TabsTrigger>
           <TabsTrigger value="user-performance">User Performance</TabsTrigger>
           <TabsTrigger value="submissions">All Submissions</TabsTrigger>
         </TabsList>
+        
+        <TabsContent value="dashboard" className="space-y-6">
+          <AdminDashboard />
+        </TabsContent>
         
         <TabsContent value="overview" className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
