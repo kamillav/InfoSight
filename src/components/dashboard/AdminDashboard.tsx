@@ -51,34 +51,78 @@ export const AdminDashboard = () => {
 
   useEffect(() => {
     fetchDashboardData();
+    
+    // Set up real-time subscription for new submissions
+    const channel = supabase
+      .channel('admin-dashboard-submissions')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'submissions'
+        },
+        (payload) => {
+          console.log('New submission received in dashboard:', payload);
+          fetchDashboardData();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'submissions'
+        },
+        (payload) => {
+          console.log('Submission updated in dashboard:', payload);
+          fetchDashboardData();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const fetchDashboardData = async () => {
     try {
-      // Fetch all submissions first
+      // First fetch all users
+      const { data: usersData, error: usersError } = await supabase
+        .from('profiles')
+        .select('*')
+        .order('name');
+
+      if (usersError) {
+        console.error('Error fetching users for dashboard:', usersError);
+        return;
+      }
+
+      // Create user lookup map and assign colors
+      const userMap = new Map<string, UserProfile>();
+      const colors: Record<string, string> = {};
+      (usersData || []).forEach((user, index) => {
+        userMap.set(user.id, user);
+        colors[user.id] = USER_COLORS[index % USER_COLORS.length];
+      });
+      setUserColors(colors);
+
+      // Fetch ALL completed submissions (not filtered by user) - this should work for admins
       const { data: submissionsData, error: submissionsError } = await supabase
         .from('submissions')
         .select('*')
         .eq('status', 'completed')
         .order('created_at', { ascending: false });
 
-      if (submissionsError) throw submissionsError;
+      if (submissionsError) {
+        console.error('Error fetching all submissions for dashboard:', submissionsError);
+        return;
+      }
 
-      // Fetch all users
-      const { data: usersData, error: usersError } = await supabase
-        .from('profiles')
-        .select('*')
-        .order('name');
+      console.log('Fetched submissions for dashboard:', submissionsData?.length || 0);
 
-      if (usersError) throw usersError;
-
-      // Create a map of user IDs to user profiles for easy lookup
-      const userMap = new Map<string, UserProfile>();
-      (usersData || []).forEach(user => {
-        userMap.set(user.id, user);
-      });
-
-      // Type cast the submissions data and manually join with profiles
+      // Manually join submissions with profiles using the lookup map
       const typedSubmissions: UserSubmission[] = (submissionsData || []).map(submission => {
         const userProfile = userMap.get(submission.user_id);
         return {
@@ -97,15 +141,9 @@ export const AdminDashboard = () => {
         };
       });
 
+      console.log('Processed submissions with user profiles:', typedSubmissions.length);
       setSubmissions(typedSubmissions);
       setUsers(usersData || []);
-
-      // Assign colors to users
-      const colors: Record<string, string> = {};
-      (usersData || []).forEach((user, index) => {
-        colors[user.id] = USER_COLORS[index % USER_COLORS.length];
-      });
-      setUserColors(colors);
 
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
@@ -237,7 +275,7 @@ export const AdminDashboard = () => {
     <div className="space-y-6">
       {/* Controls */}
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">Admin Dashboard</h2>
+        <h2 className="text-2xl font-bold">Admin Dashboard - All User Submissions</h2>
         <div className="flex items-center gap-4">
           <ReprocessTranscriptsButton />
           <Select value={selectedTimeframe} onValueChange={setSelectedTimeframe}>
