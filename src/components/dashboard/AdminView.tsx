@@ -13,7 +13,7 @@ import { WordCloudChart } from './charts/WordCloudChart';
 import { KPIChart } from './charts/KPIChart';
 import { SentimentChart } from './charts/SentimentChart';
 import { AdminDashboard } from './AdminDashboard';
-import { Users, TrendingUp, MessageSquare, BarChart3, Plus, Edit, Trash2, Target, Lightbulb, PieChart } from 'lucide-react';
+import { Users, TrendingUp, MessageSquare, BarChart3, Plus, Edit, Trash2, Target, Lightbulb, PieChart, RefreshCw } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
@@ -76,6 +76,45 @@ export const AdminView = () => {
 
   useEffect(() => {
     fetchAllData();
+    
+    // Set up real-time subscription for new submissions
+    const channel = supabase
+      .channel('admin-submissions-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'submissions'
+        },
+        (payload) => {
+          console.log('New submission received:', payload);
+          // Refresh data when new submission is inserted
+          fetchSubmissions();
+          toast({
+            title: "New submission received",
+            description: "Dashboard data has been updated with new insights.",
+          });
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'submissions'
+        },
+        (payload) => {
+          console.log('Submission updated:', payload);
+          // Refresh data when submission is updated (e.g., processing completed)
+          fetchSubmissions();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const fetchAllData = async () => {
@@ -107,36 +146,70 @@ export const AdminView = () => {
   };
 
   const fetchSubmissions = async () => {
-    const { data, error } = await supabase
+    // Fetch all submissions first
+    const { data: submissionsData, error: submissionsError } = await supabase
       .from('submissions')
-      .select(`
-        *,
-        profiles (
-          name,
-          email
-        )
-      `)
+      .select('*')
       .order('created_at', { ascending: false });
 
-    if (error) {
-      console.error('Error fetching submissions:', error);
+    if (submissionsError) {
+      console.error('Error fetching submissions:', submissionsError);
       return;
     }
 
-    setSubmissions((data as any) || []);
+    // Fetch all users
+    const { data: usersData, error: usersError } = await supabase
+      .from('profiles')
+      .select('*');
+
+    if (usersError) {
+      console.error('Error fetching users for submissions:', usersError);
+      return;
+    }
+
+    // Create a map of user IDs to user profiles for easy lookup
+    const userMap = new Map<string, UserProfile>();
+    (usersData || []).forEach(user => {
+      userMap.set(user.id, user);
+    });
+
+    // Manually join submissions with profiles
+    const typedSubmissions: UserSubmission[] = (submissionsData || []).map(submission => {
+      const userProfile = userMap.get(submission.user_id);
+      return {
+        id: submission.id,
+        user_id: submission.user_id,
+        created_at: submission.created_at,
+        status: submission.status,
+        sentiment: submission.sentiment,
+        key_points: submission.key_points,
+        extracted_kpis: submission.extracted_kpis,
+        ai_quotes: submission.ai_quotes,
+        video_files: submission.video_files,
+        docx_file: submission.docx_file,
+        profiles: userProfile ? {
+          name: userProfile.name,
+          email: userProfile.email
+        } : null
+      };
+    });
+
+    setSubmissions(typedSubmissions);
     
-    // Process extracted KPIs
+    // Process extracted KPIs with enhanced integration
     const kpiMap = new Map<string, {count: number, submissions: string[]}>();
     
-    (data as any)?.forEach((submission: UserSubmission) => {
+    typedSubmissions.forEach((submission: UserSubmission) => {
       if (submission.extracted_kpis && submission.status === 'completed') {
         submission.extracted_kpis.forEach((kpi: string) => {
-          if (kpiMap.has(kpi)) {
-            const existing = kpiMap.get(kpi)!;
+          // Clean and normalize KPI names for better matching
+          const cleanKpi = kpi.trim();
+          if (kpiMap.has(cleanKpi)) {
+            const existing = kpiMap.get(cleanKpi)!;
             existing.count += 1;
             existing.submissions.push(submission.id);
           } else {
-            kpiMap.set(kpi, { count: 1, submissions: [submission.id] });
+            kpiMap.set(cleanKpi, { count: 1, submissions: [submission.id] });
           }
         });
       }
@@ -328,7 +401,7 @@ export const AdminView = () => {
   const completedSubmissions = filteredSubmissions.filter(s => s.status === 'completed');
   const positiveSubmissions = completedSubmissions.filter(s => s.sentiment === 'positive');
 
-  // Generate analytics data
+  // Generate analytics data with integrated KPIs from dashboard
   const kpiMentions = completedSubmissions.reduce((acc: Record<string, number>, submission) => {
     (submission.extracted_kpis || []).forEach(kpi => {
       acc[kpi] = (acc[kpi] || 0) + 1;
@@ -339,7 +412,31 @@ export const AdminView = () => {
   const topKPIs = Object.entries(kpiMentions)
     .map(([name, count]) => ({ name, count }))
     .sort((a, b) => b.count - a.count)
-    .slice(0, 10);
+    .slice(0, 15); // Show more KPIs
+
+  // Enhanced sentiment analysis data
+  const sentimentData = [
+    { name: 'Positive', value: positiveSubmissions.length, color: '#22C55E' },
+    { name: 'Neutral', value: completedSubmissions.filter(s => s.sentiment === 'neutral').length, color: '#6B7280' },
+    { name: 'Negative', value: completedSubmissions.filter(s => s.sentiment === 'negative').length, color: '#EF4444' }
+  ];
+
+  // Word cloud data from key points
+  const wordCloudData = completedSubmissions
+    .flatMap(s => s.key_points || [])
+    .join(' ')
+    .split(' ')
+    .filter(word => word.length > 3)
+    .reduce((acc: Record<string, number>, word) => {
+      const cleanWord = word.toLowerCase().replace(/[^\w]/g, '');
+      acc[cleanWord] = (acc[cleanWord] || 0) + 1;
+      return acc;
+    }, {});
+
+  const topWords = Object.entries(wordCloudData)
+    .map(([text, value]) => ({ text, value }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 50);
 
   if (loading) {
     return (
@@ -351,7 +448,8 @@ export const AdminView = () => {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      {/* Enhanced summary stats with real-time indicator */}
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center gap-2">
@@ -379,7 +477,19 @@ export const AdminView = () => {
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center gap-2">
-              <TrendingUp className="w-5 h-5 text-purple-600" />
+              <Target className="w-5 h-5 text-purple-600" />
+              <div>
+                <p className="text-2xl font-bold">{extractedKPIs.length}</p>
+                <p className="text-sm text-gray-600">Unique KPIs Found</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center gap-2">
+              <TrendingUp className="w-5 h-5 text-orange-600" />
               <div>
                 <p className="text-2xl font-bold">
                   {completedSubmissions.length > 0 
@@ -395,7 +505,7 @@ export const AdminView = () => {
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center gap-2">
-              <BarChart3 className="w-5 h-5 text-orange-600" />
+              <BarChart3 className="w-5 h-5 text-indigo-600" />
               <div>
                 <p className="text-2xl font-bold">{kpis.filter(k => k.is_active).length}</p>
                 <p className="text-sm text-gray-600">Active KPIs</p>
@@ -411,7 +521,7 @@ export const AdminView = () => {
             <PieChart className="w-4 h-4 mr-2" />
             Dashboard
           </TabsTrigger>
-          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="overview">Enhanced Overview</TabsTrigger>
           <TabsTrigger value="extracted-kpis">AI Extracted KPIs</TabsTrigger>
           <TabsTrigger value="kpi-management">KPI Management</TabsTrigger>
           <TabsTrigger value="user-performance">User Performance</TabsTrigger>
@@ -426,8 +536,11 @@ export const AdminView = () => {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <Card>
               <CardHeader>
-                <CardTitle>Top Mentioned KPIs</CardTitle>
-                <CardDescription>Most frequently mentioned business metrics</CardDescription>
+                <CardTitle className="flex items-center gap-2">
+                  <Target className="w-5 h-5" />
+                  Top KPIs Across All Submissions
+                </CardTitle>
+                <CardDescription>Most frequently mentioned business metrics with real-time updates</CardDescription>
               </CardHeader>
               <CardContent>
                 {topKPIs.length > 0 ? (
@@ -440,18 +553,53 @@ export const AdminView = () => {
             
             <Card>
               <CardHeader>
+                <CardTitle>Sentiment Analysis Overview</CardTitle>
+                <CardDescription>Distribution of sentiment across all submissions</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {sentimentData.some(d => d.value > 0) ? (
+                  <SentimentChart data={sentimentData} />
+                ) : (
+                  <p className="text-gray-500 text-center py-8">No sentiment data available yet</p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Key Insights Word Cloud</CardTitle>
+                <CardDescription>Most mentioned words in key points</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {topWords.length > 0 ? (
+                  <WordCloudChart data={topWords} />
+                ) : (
+                  <p className="text-gray-500 text-center py-8">No word data available yet</p>
+                )}
+              </CardContent>
+            </Card>
+            
+            <Card>
+              <CardHeader>
                 <CardTitle>Recent Activity</CardTitle>
                 <CardDescription>Latest submissions from team members</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {completedSubmissions.slice(0, 3).map((submission, index) => (
+                  {completedSubmissions.slice(0, 5).map((submission, index) => (
                     <div key={index} className="border-l-4 border-blue-500 pl-4">
                       <p className="text-sm font-medium">{submission.profiles?.name || 'Unknown User'}</p>
                       <p className="text-xs text-gray-500">{new Date(submission.created_at).toLocaleDateString()}</p>
                       <p className="text-sm text-gray-700 mt-1">
                         {submission.key_points?.length || 0} insights • {submission.extracted_kpis?.length || 0} KPIs
                       </p>
+                      {submission.sentiment && (
+                        <Badge className={`text-xs mt-1 ${getSentimentColor(submission.sentiment)}`}>
+                          {submission.sentiment}
+                        </Badge>
+                      )}
                     </div>
                   ))}
                   {completedSubmissions.length === 0 && (
@@ -469,9 +617,18 @@ export const AdminView = () => {
               <CardTitle className="flex items-center gap-2">
                 <Lightbulb className="w-5 h-5" />
                 AI Extracted KPIs from User Submissions
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={fetchSubmissions}
+                  className="ml-auto"
+                >
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Refresh
+                </Button>
               </CardTitle>
               <CardDescription>
-                Review KPIs extracted by AI from user videos to potentially add them as official metrics
+                Review KPIs extracted by AI from user videos to potentially add them as official metrics (Auto-updates with new submissions)
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -487,7 +644,7 @@ export const AdminView = () => {
                         <div className="flex-1">
                           <h3 className="font-medium text-gray-900">{item.kpi}</h3>
                           <p className="text-sm text-gray-600 mt-1">
-                            Mentioned in {item.count} submission{item.count > 1 ? 's' : ''}
+                            Mentioned in {item.count} submission{item.count > 1 ? 's' : ''} • Found in {item.submissions.length} unique context{item.submissions.length > 1 ? 's' : ''}
                           </p>
                         </div>
                         <div className="flex items-center gap-2">
@@ -672,7 +829,7 @@ export const AdminView = () => {
             </Select>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <Card>
               <CardContent className="p-6">
                 <div className="text-center">
@@ -686,6 +843,16 @@ export const AdminView = () => {
                 <div className="text-center">
                   <p className="text-2xl font-bold">{completedSubmissions.length}</p>
                   <p className="text-sm text-gray-600">Completed</p>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-6">
+                <div className="text-center">
+                  <p className="text-2xl font-bold">
+                    {filteredSubmissions.reduce((sum, s) => sum + (s.extracted_kpis?.length || 0), 0)}
+                  </p>
+                  <p className="text-sm text-gray-600">Total KPIs</p>
                 </div>
               </CardContent>
             </Card>
@@ -708,7 +875,7 @@ export const AdminView = () => {
           <Card>
             <CardHeader>
               <CardTitle>All User Submissions</CardTitle>
-              <CardDescription>Complete overview of team submissions and insights</CardDescription>
+              <CardDescription>Complete overview of team submissions and insights (Real-time updated)</CardDescription>
             </CardHeader>
             <CardContent>
               <Table>
