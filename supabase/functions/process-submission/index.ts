@@ -10,7 +10,7 @@ const corsHeaders = {
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const openaiApiKey = Deno.env.get('OPEN_API_KEY')!; // Fixed: Using correct secret name
+const openaiApiKey = Deno.env.get('OPENAI_API_KEY')!; // Fixed: Using correct secret name
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
