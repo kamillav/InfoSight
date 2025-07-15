@@ -78,7 +78,23 @@ export const AdminDashboard = () => {
 
       if (usersError) throw usersError;
 
-      setSubmissions(submissionsData || []);
+      // Type cast the submissions data to match our interface
+      const typedSubmissions: UserSubmission[] = (submissionsData || []).map(submission => ({
+        id: submission.id,
+        user_id: submission.user_id,
+        created_at: submission.created_at,
+        status: submission.status,
+        sentiment: submission.sentiment,
+        key_points: submission.key_points,
+        extracted_kpis: submission.extracted_kpis,
+        ai_quotes: submission.ai_quotes,
+        profiles: submission.profiles ? {
+          name: submission.profiles.name,
+          email: submission.profiles.email
+        } : null
+      }));
+
+      setSubmissions(typedSubmissions);
       setUsers(usersData || []);
 
       // Assign colors to users
