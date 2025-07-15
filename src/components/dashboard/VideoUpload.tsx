@@ -11,7 +11,7 @@ import { supabase } from '@/integrations/supabase/client';
 const PRESET_QUESTIONS = [
   "What was your biggest achievement this week?",
   "What challenges did you face and how did you overcome them?",
-  "What metrics or KPIs show your impact this week? Provide as much detail as possible"
+  "What metrics or KPIs show your impact this week? Provide as much detail as possible. "
 ];
 
 interface Submission {
@@ -100,11 +100,11 @@ export const VideoUpload = () => {
         return;
       }
       
-      // Validate file size (200MB limit)
-      if (file.size > 200 * 1024 * 1024) {
+      // Validate file size (25MB limit)
+      if (file.size > 25 * 1024 * 1024) {
         toast({
           title: "File too large",
-          description: `File size is ${formatFileSize(file.size)}. Please select a video under 200MB.`,
+          description: `File size is ${formatFileSize(file.size)}. Please select a video under 25MB.`,
           variant: "destructive"
         });
         return;
@@ -555,14 +555,14 @@ export const VideoUpload = () => {
                   <div className="text-sm text-amber-800">
                     <p className="font-medium">Enhanced Processing Guidelines:</p>
                     <ul className="mt-1 space-y-1 text-xs">
-                      <li>• Upload one video per question (3 total)</li>
-                      <li>• Keep each video under 200MB</li>
-                      <li>• Use DOCX files for KPI data (better than PDF!)</li>
-                      <li>• Include tables, charts, and structured metrics in DOCX</li>
-                      <li>• Videos processed sequentially for reliability</li>
-                      <li>• Speak clearly and mention specific metrics</li>
-                      <li>• Include concrete examples and numbers</li>
-                      <li>• Upload all files at once with the button below</li>
+                      <li>• Upload a video per question (3 total).</li>
+                      <li>• Keep each video under 25MB</li>
+                      <li>• Use DOCX files for KPI data.</li>
+                      <li>• Include tables, charts, and structured metrics in DOCX.</li>
+                      <li>• Videos processed sequentially for reliability.</li>
+                      <li>• Speak clearly and mention specific metrics.</li>
+                      <li>• Include concrete examples and numbers.</li>
+                      <li>• Upload all files at once with the button below.</li>
                     </ul>
                   </div>
                 </div>
