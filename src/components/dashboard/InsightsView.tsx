@@ -2,9 +2,10 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { CalendarDays, TrendingUp, MessageSquare, Quote, FileText, Clock } from 'lucide-react';
+import { CalendarDays, TrendingUp, MessageSquare, Quote, FileText, Clock, BarChart3 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { KPIVisualizations } from './KPIVisualizations';
 import type { Json } from '@/integrations/supabase/types';
 
 interface Submission {
@@ -166,135 +167,156 @@ export const InsightsView = ({ userId }: InsightsViewProps) => {
         </Card>
       </div>
 
-      <div className="space-y-6">
-        {submissions.map((submission) => (
-          <Card key={submission.id}>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-lg">
-                  Submission - {new Date(submission.created_at).toLocaleDateString()}
-                </CardTitle>
-                <div className="flex items-center gap-2">
-                  <Badge className={getStatusColor(submission.status)}>
-                    {submission.status === 'processing' && <Clock className="w-3 h-3 mr-1" />}
-                    {submission.status}
-                  </Badge>
-                  {submission.pdf_file && (
-                    <Badge variant="outline" className="text-xs">
-                      <FileText className="w-3 h-3 mr-1" />
-                      PDF Included
+      <Tabs defaultValue="visualizations" className="w-full">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="visualizations" className="flex items-center gap-2">
+            <BarChart3 className="w-4 h-4" />
+            KPI Analytics
+          </TabsTrigger>
+          <TabsTrigger value="submissions" className="flex items-center gap-2">
+            <MessageSquare className="w-4 h-4" />
+            Submission Details
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="visualizations" className="space-y-6">
+          <KPIVisualizations submissions={completedSubmissions} />
+        </TabsContent>
+
+        <TabsContent value="submissions" className="space-y-6">
+          {submissions.map((submission) => (
+            <Card key={submission.id}>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-lg">
+                    Submission - {new Date(submission.created_at).toLocaleDateString()}
+                  </CardTitle>
+                  <div className="flex items-center gap-2">
+                    <Badge className={getStatusColor(submission.status)}>
+                      {submission.status === 'processing' && <Clock className="w-3 h-3 mr-1" />}
+                      {submission.status}
                     </Badge>
-                  )}
-                  {submission.sentiment && (
-                    <Badge className={getSentimentColor(submission.sentiment)}>
-                      {submission.sentiment}
-                    </Badge>
-                  )}
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {submission.status === 'processing' ? (
-                <div className="flex items-center justify-center py-8">
-                  <div className="text-center">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-                    <p className="text-gray-600">Processing your submission...</p>
-                    <p className="text-sm text-gray-500 mt-1">This may take a few minutes</p>
+                    {submission.pdf_file && (
+                      <Badge variant="outline" className="text-xs">
+                        <FileText className="w-3 h-3 mr-1" />
+                        PDF Included
+                      </Badge>
+                    )}
+                    {submission.sentiment && (
+                      <Badge className={getSentimentColor(submission.sentiment)}>
+                        {submission.sentiment}
+                      </Badge>
+                    )}
                   </div>
                 </div>
-              ) : submission.status === 'failed' ? (
-                <div className="text-center py-8">
-                  <div className="text-red-600 mb-2">Processing Failed</div>
-                  {submission.processing_error && (
-                    <p className="text-sm text-gray-600">{submission.processing_error}</p>
-                  )}
-                </div>
-              ) : (
-                <Tabs defaultValue="transcript" className="w-full">
-                  <TabsList className="grid w-full grid-cols-4">
-                    <TabsTrigger value="transcript">Transcript</TabsTrigger>
-                    <TabsTrigger value="insights">Key Points</TabsTrigger>
-                    <TabsTrigger value="kpis">KPIs</TabsTrigger>
-                    <TabsTrigger value="quotes">Quotes</TabsTrigger>
-                  </TabsList>
-                  
-                  <TabsContent value="transcript" className="mt-4">
-                    <div className="space-y-4">
-                      {submission.transcript ? (
-                        <div className="p-4 bg-gray-50 rounded-lg">
-                          <p className="text-sm leading-relaxed">
-                            {typeof submission.transcript === 'string' 
-                              ? submission.transcript 
-                              : JSON.stringify(submission.transcript)}
-                          </p>
+              </CardHeader>
+              <CardContent>
+                {submission.status === 'processing' ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="text-center">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+                      <p className="text-gray-600">Processing your submission...</p>
+                      <p className="text-sm text-gray-500 mt-1">This may take up to 10 minutes</p>
+                    </div>
+                  </div>
+                ) : submission.status === 'error' ? (
+                  <div className="text-center py-8">
+                    <div className="text-red-600 mb-2">
+                      {submission.processing_error?.includes('timed out') ? 'Processing Timed Out' : 'Processing Failed'}
+                    </div>
+                    {submission.processing_error && (
+                      <p className="text-sm text-gray-600">{submission.processing_error}</p>
+                    )}
+                  </div>
+                ) : (
+                  <Tabs defaultValue="transcript" className="w-full">
+                    <TabsList className="grid w-full grid-cols-4">
+                      <TabsTrigger value="transcript">Transcript</TabsTrigger>
+                      <TabsTrigger value="insights">Key Points</TabsTrigger>
+                      <TabsTrigger value="kpis">KPIs</TabsTrigger>
+                      <TabsTrigger value="quotes">Quotes</TabsTrigger>
+                    </TabsList>
+                    
+                    <TabsContent value="transcript" className="mt-4">
+                      <div className="space-y-4">
+                        {submission.transcript ? (
+                          <div className="p-4 bg-gray-50 rounded-lg">
+                            <p className="text-sm leading-relaxed">
+                              {typeof submission.transcript === 'string' 
+                                ? submission.transcript 
+                                : JSON.stringify(submission.transcript)}
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="p-4 bg-gray-50 rounded-lg">
+                            <p className="text-sm text-gray-500">Transcript not available</p>
+                          </div>
+                        )}
+                        {submission.notes && (
+                          <div className="p-4 bg-blue-50 rounded-lg">
+                            <h4 className="font-medium text-sm mb-2">Additional Notes:</h4>
+                            <p className="text-sm text-gray-700">{submission.notes}</p>
+                          </div>
+                        )}
+                        <div className="text-xs text-gray-500">
+                          <p>Video: {submission.video_files?.name || 'Unknown'}</p>
+                          {submission.pdf_file && <p>PDF: Document included</p>}
                         </div>
-                      ) : (
-                        <div className="p-4 bg-gray-50 rounded-lg">
-                          <p className="text-sm text-gray-500">Transcript not available</p>
-                        </div>
-                      )}
-                      {submission.notes && (
-                        <div className="p-4 bg-blue-50 rounded-lg">
-                          <h4 className="font-medium text-sm mb-2">Additional Notes:</h4>
-                          <p className="text-sm text-gray-700">{submission.notes}</p>
-                        </div>
-                      )}
-                      <div className="text-xs text-gray-500">
-                        <p>Videos: {getVideoFiles(submission.video_files).length} uploaded</p>
-                        {submission.pdf_file && <p>PDF: Document included</p>}
                       </div>
-                    </div>
-                  </TabsContent>
-                  
-                  <TabsContent value="insights" className="mt-4">
-                    <div className="space-y-2">
-                      {submission.key_points && submission.key_points.length > 0 ? (
-                        submission.key_points.map((point, index) => (
-                          <div key={index} className="flex items-start gap-2">
-                            <div className="w-2 h-2 bg-blue-500 rounded-full mt-2"></div>
-                            <p className="text-sm">{point}</p>
-                          </div>
-                        ))
-                      ) : (
-                        <p className="text-sm text-gray-500">No key points extracted yet</p>
-                      )}
-                    </div>
-                  </TabsContent>
-                  
-                  <TabsContent value="kpis" className="mt-4">
-                    <div className="flex flex-wrap gap-2">
-                      {submission.extracted_kpis && submission.extracted_kpis.length > 0 ? (
-                        submission.extracted_kpis.map((kpi, index) => (
-                          <Badge key={index} variant="outline">
-                            {kpi}
-                          </Badge>
-                        ))
-                      ) : (
-                        <p className="text-sm text-gray-500">No KPIs extracted yet</p>
-                      )}
-                    </div>
-                  </TabsContent>
-                  
-                  <TabsContent value="quotes" className="mt-4">
-                    <div className="space-y-3">
-                      {submission.ai_quotes && submission.ai_quotes.length > 0 ? (
-                        submission.ai_quotes.map((quote, index) => (
-                          <div key={index} className="flex items-start gap-2">
-                            <Quote className="w-4 h-4 text-gray-400 mt-0.5" />
-                            <p className="text-sm italic text-gray-700">{quote}</p>
-                          </div>
-                        ))
-                      ) : (
-                        <p className="text-sm text-gray-500">No quotes extracted yet</p>
-                      )}
-                    </div>
-                  </TabsContent>
-                </Tabs>
-              )}
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+                    </TabsContent>
+                    
+                    <TabsContent value="insights" className="mt-4">
+                      <div className="space-y-2">
+                        {submission.key_points && submission.key_points.length > 0 ? (
+                          submission.key_points.map((point, index) => (
+                            <div key={index} className="flex items-start gap-2">
+                              <div className="w-2 h-2 bg-blue-500 rounded-full mt-2"></div>
+                              <p className="text-sm">{point}</p>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-sm text-gray-500">No key points extracted yet</p>
+                        )}
+                      </div>
+                    </TabsContent>
+                    
+                    <TabsContent value="kpis" className="mt-4">
+                      <div className="space-y-2">
+                        {submission.extracted_kpis && submission.extracted_kpis.length > 0 ? (
+                          submission.extracted_kpis.map((kpi, index) => (
+                            <div key={index} className="flex items-center gap-2">
+                              <Badge variant="outline" className="text-sm">
+                                {kpi}
+                              </Badge>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-sm text-gray-500">No KPIs extracted yet</p>
+                        )}
+                      </div>
+                    </TabsContent>
+                    
+                    <TabsContent value="quotes" className="mt-4">
+                      <div className="space-y-3">
+                        {submission.ai_quotes && submission.ai_quotes.length > 0 ? (
+                          submission.ai_quotes.map((quote, index) => (
+                            <div key={index} className="flex items-start gap-2">
+                              <Quote className="w-4 h-4 text-gray-400 mt-0.5" />
+                              <p className="text-sm italic text-gray-700">{quote}</p>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-sm text-gray-500">No quotes extracted yet</p>
+                        )}
+                      </div>
+                    </TabsContent>
+                  </Tabs>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };

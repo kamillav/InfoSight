@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Upload, Video, AlertCircle, CheckCircle, FileText, Calendar, User, PlayCircle, FileImage, MessageSquare, Plus, ChevronDown, ChevronUp } from 'lucide-react';
+import { Upload, Video, AlertCircle, CheckCircle, FileText, Calendar, User, PlayCircle, FileImage, MessageSquare, Plus, ChevronDown, ChevronUp, Clock, X } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
@@ -33,15 +33,32 @@ interface Submission {
 }
 
 export const VideoUpload = () => {
-  const [selectedVideos, setSelectedVideos] = useState<(File | null)[]>([null, null, null]);
+  // Allow up to 3 videos per question
+  const [selectedVideos, setSelectedVideos] = useState<(File | null)[][]>([
+    [null, null, null], // Question 1: 3 video slots
+    [null, null, null], // Question 2: 3 video slots 
+    [null, null, null]  // Question 3: 3 video slots
+  ]);
   const [selectedPDF, setSelectedPDF] = useState<File | null>(null);
-  const [uploading, setUploading] = useState<boolean[]>([false, false, false]);
-  const [processing, setProcessing] = useState<boolean[]>([false, false, false]);
+  const [uploading, setUploading] = useState<boolean[][]>([
+    [false, false, false],
+    [false, false, false],
+    [false, false, false]
+  ]);
+  const [processing, setProcessing] = useState<boolean[][]>([
+    [false, false, false],
+    [false, false, false],
+    [false, false, false]
+  ]);
   const [notes, setNotes] = useState(['', '', '']);
   const [showNotes, setShowNotes] = useState<boolean[]>([false, false, false]);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loadingSubmissions, setLoadingSubmissions] = useState(true);
-  const videoInputRefs = useRef<(HTMLInputElement | null)[]>([null, null, null]);
+  const videoInputRefs = useRef<(HTMLInputElement | null)[][]>([
+    [null, null, null],
+    [null, null, null],
+    [null, null, null]
+  ]);
   const pdfInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const { user, profile } = useAuth();
@@ -77,10 +94,18 @@ export const VideoUpload = () => {
     }
   };
 
-  const handleVideoSelect = (questionIndex: number, e: React.ChangeEvent<HTMLInputElement>) => {
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
+
+  const handleVideoSelect = (questionIndex: number, videoSlot: number, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      // Validate file type and size
+      // Validate file type
       if (!file.type.startsWith('video/')) {
         toast({
           title: "Invalid file type",
@@ -90,18 +115,34 @@ export const VideoUpload = () => {
         return;
       }
       
-      if (file.size > 200 * 1024 * 1024) { // 200MB limit
+      // Validate file size (200MB limit)
+      if (file.size > 200 * 1024 * 1024) {
         toast({
           title: "File too large",
-          description: "Please select a video under 200MB.",
+          description: `File size is ${formatFileSize(file.size)}. Please select a video under 200MB.`,
           variant: "destructive"
         });
         return;
       }
 
       const newSelectedVideos = [...selectedVideos];
-      newSelectedVideos[questionIndex] = file;
+      newSelectedVideos[questionIndex][videoSlot] = file;
       setSelectedVideos(newSelectedVideos);
+
+      toast({
+        title: "Video selected",
+        description: `File: ${file.name} (${formatFileSize(file.size)})`,
+      });
+    }
+  };
+
+  const removeVideo = (questionIndex: number, videoSlot: number) => {
+    const newSelectedVideos = [...selectedVideos];
+    newSelectedVideos[questionIndex][videoSlot] = null;
+    setSelectedVideos(newSelectedVideos);
+    
+    if (videoInputRefs.current[questionIndex][videoSlot]) {
+      videoInputRefs.current[questionIndex][videoSlot]!.value = '';
     }
   };
 
@@ -121,18 +162,22 @@ export const VideoUpload = () => {
       if (file.size > 50 * 1024 * 1024) { // 50MB limit for PDFs
         toast({
           title: "File too large",
-          description: "Please select a PDF under 50MB.",
+          description: `PDF size is ${formatFileSize(file.size)}. Please select a PDF under 50MB.`,
           variant: "destructive"
         });
         return;
       }
 
       setSelectedPDF(file);
+      toast({
+        title: "PDF selected",
+        description: `File: ${file.name} (${formatFileSize(file.size)})`,
+      });
     }
   };
 
-  const handleUpload = async (questionIndex: number) => {
-    const selectedVideo = selectedVideos[questionIndex];
+  const handleUpload = async (questionIndex: number, videoSlot: number) => {
+    const selectedVideo = selectedVideos[questionIndex][videoSlot];
     if (!selectedVideo || !user || !profile) {
       toast({
         title: "Missing required files",
@@ -144,16 +189,16 @@ export const VideoUpload = () => {
 
     const newUploading = [...uploading];
     const newProcessing = [...processing];
-    newUploading[questionIndex] = true;
-    newProcessing[questionIndex] = true;
+    newUploading[questionIndex][videoSlot] = true;
+    newProcessing[questionIndex][videoSlot] = true;
     setUploading(newUploading);
     setProcessing(newProcessing);
 
     try {
-      console.log('Starting submission process for question:', questionIndex);
+      console.log('Starting submission process for question:', questionIndex, 'video slot:', videoSlot);
 
       // Upload video to Supabase Storage
-      const videoFileName = `${user.id}/${Date.now()}_q${questionIndex}_${selectedVideo.name}`;
+      const videoFileName = `${user.id}/${Date.now()}_q${questionIndex}_v${videoSlot}_${selectedVideo.name}`;
       const { data: videoUpload, error: videoError } = await supabase.storage
         .from('submissions')
         .upload(videoFileName, selectedVideo);
@@ -180,13 +225,19 @@ export const VideoUpload = () => {
       }
 
       // Create submission record in database with question context
-      const submissionNotes = `${PRESET_QUESTIONS[questionIndex]}\n\nResponse: ${notes[questionIndex] || 'No additional notes provided.'}`;
+      const submissionNotes = `${PRESET_QUESTIONS[questionIndex]} (Video ${videoSlot + 1})\n\nResponse: ${notes[questionIndex] || 'No additional notes provided.'}`;
       
       const { data: submission, error: dbError } = await supabase
         .from('submissions')
         .insert({
           user_id: user.id,
-          video_files: { path: videoUpload.path, name: selectedVideo.name, question_index: questionIndex },
+          video_files: { 
+            path: videoUpload.path, 
+            name: selectedVideo.name, 
+            question_index: questionIndex,
+            video_slot: videoSlot,
+            size: selectedVideo.size
+          },
           pdf_file: pdfFileName,
           notes: submissionNotes,
           status: 'processing'
@@ -208,7 +259,6 @@ export const VideoUpload = () => {
 
       if (processingError) {
         console.error('Edge function processing error:', processingError);
-        // Update submission status to error
         await supabase
           .from('submissions')
           .update({ 
@@ -223,23 +273,20 @@ export const VideoUpload = () => {
       console.log('Edge function called successfully:', functionResult);
 
       toast({
-        title: "Submission uploaded successfully!",
-        description: `Your video for question ${questionIndex + 1} is being processed.`,
+        title: "Video uploaded successfully!",
+        description: `Video ${videoSlot + 1} for question ${questionIndex + 1} is being processed. This may take up to 10 minutes.`,
       });
 
-      // Reset form for this question
+      // Reset form for this video slot
       const newSelectedVideos = [...selectedVideos];
-      const newNotes = [...notes];
-      newSelectedVideos[questionIndex] = null;
-      newNotes[questionIndex] = '';
+      newSelectedVideos[questionIndex][videoSlot] = null;
       setSelectedVideos(newSelectedVideos);
-      setNotes(newNotes);
       
-      if (videoInputRefs.current[questionIndex]) {
-        videoInputRefs.current[questionIndex]!.value = '';
+      if (videoInputRefs.current[questionIndex][videoSlot]) {
+        videoInputRefs.current[questionIndex][videoSlot]!.value = '';
       }
 
-      // Reload submissions after a short delay to see the new submission
+      // Reload submissions after a short delay
       setTimeout(() => {
         loadSubmissions();
       }, 1000);
@@ -253,8 +300,8 @@ export const VideoUpload = () => {
     } finally {
       const newUploading = [...uploading];
       const newProcessing = [...processing];
-      newUploading[questionIndex] = false;
-      newProcessing[questionIndex] = false;
+      newUploading[questionIndex][videoSlot] = false;
+      newProcessing[questionIndex][videoSlot] = false;
       setUploading(newUploading);
       setProcessing(newProcessing);
     }
@@ -304,7 +351,7 @@ export const VideoUpload = () => {
                 Supporting Document (Optional)
               </CardTitle>
               <CardDescription>
-                Upload a PDF document that supports all your video responses
+                Upload a PDF document that supports all your video responses (Max: 50MB)
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -328,61 +375,99 @@ export const VideoUpload = () => {
                 {selectedPDF && (
                   <div className="mt-4 flex items-center justify-center gap-2 text-sm text-gray-600">
                     <CheckCircle className="w-4 h-4 text-green-500" />
-                    {selectedPDF.name}
+                    {selectedPDF.name} ({formatFileSize(selectedPDF.size)})
                   </div>
                 )}
               </div>
             </CardContent>
           </Card>
 
-          {/* Video Upload Slots */}
-          {PRESET_QUESTIONS.map((question, index) => (
-            <Card key={index}>
+          {/* Video Upload Slots - Updated for 3 videos per question */}
+          {PRESET_QUESTIONS.map((question, questionIndex) => (
+            <Card key={questionIndex}>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Video className="w-5 h-5" />
                   {question}
                 </CardTitle>
                 <CardDescription className="text-sm font-medium text-gray-600">
-                  Question {index + 1}
+                  Question {questionIndex + 1} - Upload up to 3 videos (Max: 200MB each)
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors">
-                  <input
-                    ref={(el) => (videoInputRefs.current[index] = el)}
-                    type="file"
-                    accept="video/*"
-                    onChange={(e) => handleVideoSelect(index, e)}
-                    className="hidden"
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => videoInputRefs.current[index]?.click()}
-                    className="w-full"
-                  >
-                    <Upload className="w-4 h-4 mr-2" />
-                    Choose Video File
-                  </Button>
-                  {selectedVideos[index] && (
-                    <div className="mt-4 flex items-center justify-center gap-2 text-sm text-gray-600">
-                      <CheckCircle className="w-4 h-4 text-green-500" />
-                      {selectedVideos[index]?.name}
+                {/* Three video upload slots */}
+                {[0, 1, 2].map((videoSlot) => (
+                  <div key={videoSlot} className="border rounded-lg p-4 space-y-3">
+                    <Label className="text-sm font-medium">Video {videoSlot + 1}</Label>
+                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-gray-400 transition-colors">
+                      <input
+                        ref={(el) => {
+                          if (!videoInputRefs.current[questionIndex]) {
+                            videoInputRefs.current[questionIndex] = [null, null, null];
+                          }
+                          videoInputRefs.current[questionIndex][videoSlot] = el;
+                        }}
+                        type="file"
+                        accept="video/*"
+                        onChange={(e) => handleVideoSelect(questionIndex, videoSlot, e)}
+                        className="hidden"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => videoInputRefs.current[questionIndex][videoSlot]?.click()}
+                        className="w-full"
+                        disabled={uploading[questionIndex][videoSlot]}
+                      >
+                        <Upload className="w-4 h-4 mr-2" />
+                        Choose Video File
+                      </Button>
+                      {selectedVideos[questionIndex][videoSlot] && (
+                        <div className="mt-2 flex items-center justify-between text-sm text-gray-600">
+                          <div className="flex items-center gap-2">
+                            <CheckCircle className="w-4 h-4 text-green-500" />
+                            <span>{selectedVideos[questionIndex][videoSlot]?.name}</span>
+                            <span className="text-xs">({formatFileSize(selectedVideos[questionIndex][videoSlot]?.size || 0)})</span>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => removeVideo(questionIndex, videoSlot)}
+                          >
+                            <X className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
+                    <Button
+                      onClick={() => handleUpload(questionIndex, videoSlot)}
+                      disabled={!selectedVideos[questionIndex][videoSlot] || uploading[questionIndex][videoSlot]}
+                      className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+                    >
+                      {processing[questionIndex][videoSlot] ? (
+                        <div className="flex items-center gap-2">
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                          <Clock className="w-4 h-4" />
+                          Processing Video {videoSlot + 1}... (Up to 10 min)
+                        </div>
+                      ) : (
+                        `Upload & Process Video ${videoSlot + 1}`
+                      )}
+                    </Button>
+                  </div>
+                ))}
 
                 {/* Additional Notes Toggle Button */}
                 <Button
                   type="button"
                   variant="ghost"
-                  onClick={() => toggleNotes(index)}
+                  onClick={() => toggleNotes(questionIndex)}
                   className="w-full flex items-center justify-center gap-2 text-sm text-gray-600 hover:text-gray-800"
                 >
                   <Plus className="w-4 h-4" />
                   Additional Notes
-                  {showNotes[index] ? (
+                  {showNotes[questionIndex] ? (
                     <ChevronUp className="w-4 h-4" />
                   ) : (
                     <ChevronDown className="w-4 h-4" />
@@ -390,37 +475,22 @@ export const VideoUpload = () => {
                 </Button>
 
                 {/* Collapsible Notes Section */}
-                {showNotes[index] && (
+                {showNotes[questionIndex] && (
                   <div className="space-y-2">
-                    <Label htmlFor={`notes-${index}`}>Additional Notes (Optional)</Label>
+                    <Label htmlFor={`notes-${questionIndex}`}>Additional Notes (Optional)</Label>
                     <Textarea
-                      id={`notes-${index}`}
+                      id={`notes-${questionIndex}`}
                       placeholder="Add any additional context for this question..."
-                      value={notes[index]}
+                      value={notes[questionIndex]}
                       onChange={(e) => {
                         const newNotes = [...notes];
-                        newNotes[index] = e.target.value;
+                        newNotes[questionIndex] = e.target.value;
                         setNotes(newNotes);
                       }}
                       rows={3}
                     />
                   </div>
                 )}
-
-                <Button
-                  onClick={() => handleUpload(index)}
-                  disabled={!selectedVideos[index] || uploading[index]}
-                  className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
-                >
-                  {processing[index] ? (
-                    <div className="flex items-center gap-2">
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                      Processing Video...
-                    </div>
-                  ) : (
-                    'Upload & Process Video'
-                  )}
-                </Button>
               </CardContent>
             </Card>
           ))}
@@ -441,11 +511,12 @@ export const VideoUpload = () => {
                   <div className="text-sm text-amber-800">
                     <p className="font-medium">Recording Guidelines:</p>
                     <ul className="mt-1 space-y-1 text-xs">
-                      <li>• Keep each video under 2 minutes</li>
+                      <li>• Upload up to 3 videos per question</li>
+                      <li>• Keep each video under 200MB and 2 minutes</li>
+                      <li>• Processing takes up to 10 minutes per video</li>
                       <li>• Speak clearly and mention specific metrics</li>
-                      <li>• Include concrete examples of your impact</li>
-                      <li>• Answer each question in a separate video</li>
-                      <li>• Use the PDF upload for supporting documents</li>
+                      <li>• Include concrete examples and numbers</li>
+                      <li>• Use PDF upload for supporting documents</li>
                     </ul>
                   </div>
                 </div>
