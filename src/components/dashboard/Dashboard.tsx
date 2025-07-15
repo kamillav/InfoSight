@@ -23,7 +23,7 @@ export const Dashboard = () => {
             Welcome back, {profile.name}
           </h1>
           <p className="text-gray-600">
-            Transform your insights with EdgeVerve's intelligent analytics platform
+            Create a meaningful impact for Infosys with Infosight analytics platform
           </p>
         </div>
 
