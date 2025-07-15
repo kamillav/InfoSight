@@ -385,10 +385,10 @@ export const VideoUpload = () => {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <FileText className="w-5 h-5" />
-                Supporting Document (DOCX - Enhanced Processing)
+                Supporting Document (.docx)
               </CardTitle>
               <CardDescription>
-                Upload a DOCX document with your KPIs and business metrics (Max: 50MB) - Better extraction than PDF!
+                Upload a .docx document with your KPIs and business metrics (Max: 50MB)
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -407,7 +407,7 @@ export const VideoUpload = () => {
                   className="w-full"
                 >
                   <FileText className="w-4 h-4 mr-2" />
-                  Choose DOCX Document
+                  Choose .docx Document
                 </Button>
                 {selectedDOCX && (
                   <div className="mt-4 flex items-center justify-center gap-2 text-sm text-gray-600">
@@ -428,7 +428,7 @@ export const VideoUpload = () => {
                   {question}
                 </CardTitle>
                 <CardDescription className="text-sm font-medium text-gray-600">
-                  Question {questionIndex + 1} - Upload one video (Max: 200MB)
+                  Question {questionIndex + 1} - Upload a .mp4 video (Max: 25MB)
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -544,7 +544,7 @@ export const VideoUpload = () => {
           <CardHeader>
             <CardTitle>Recording Tips</CardTitle>
             <CardDescription>
-              Best practices for your video submissions with DOCX support
+              Best practices for your video submissions with .docx support
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -557,8 +557,8 @@ export const VideoUpload = () => {
                     <ul className="mt-1 space-y-1 text-xs">
                       <li>• Upload a video per question (3 total).</li>
                       <li>• Keep each video under 25MB</li>
-                      <li>• Use DOCX files for KPI data.</li>
-                      <li>• Include tables, charts, and structured metrics in DOCX.</li>
+                      <li>• Use .docx files for KPI data.</li>
+                      <li>• Include tables, charts, and structured metrics in .docx.</li>
                       <li>• Videos processed sequentially for reliability.</li>
                       <li>• Speak clearly and mention specific metrics.</li>
                       <li>• Include concrete examples and numbers.</li>
