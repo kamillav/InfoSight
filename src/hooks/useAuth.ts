@@ -19,6 +19,8 @@ export const useAuth = () => {
 
   const fetchUserProfile = async (userId: string) => {
     try {
+      console.log('Fetching profile for user:', userId);
+      
       // Fetch user profile
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
@@ -26,7 +28,10 @@ export const useAuth = () => {
         .eq('id', userId)
         .single();
 
-      if (profileError) throw profileError;
+      if (profileError) {
+        console.error('Profile error:', profileError);
+        throw profileError;
+      }
 
       // Fetch user role
       const { data: roleData, error: roleError } = await supabase
@@ -35,11 +40,14 @@ export const useAuth = () => {
         .eq('user_id', userId)
         .single();
 
-      if (roleError) throw roleError;
+      if (roleError) {
+        console.error('Role error:', roleError);
+        throw roleError;
+      }
 
       const userProfile: UserProfile = {
         ...profileData,
-        role: roleData.role
+        role: roleData?.role || 'user'
       };
 
       console.log('Fetched user profile:', userProfile);
@@ -52,6 +60,8 @@ export const useAuth = () => {
   };
 
   useEffect(() => {
+    console.log('Setting up auth state listener');
+    
     // Set up auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
@@ -63,7 +73,7 @@ export const useAuth = () => {
           // Defer profile fetching to avoid deadlocks
           setTimeout(() => {
             fetchUserProfile(session.user.id);
-          }, 0);
+          }, 100);
         } else {
           setProfile(null);
         }
@@ -74,6 +84,7 @@ export const useAuth = () => {
 
     // Check for existing session
     supabase.auth.getSession().then(({ data: { session } }) => {
+      console.log('Initial session check:', session?.user?.email);
       setSession(session);
       setUser(session?.user ?? null);
       

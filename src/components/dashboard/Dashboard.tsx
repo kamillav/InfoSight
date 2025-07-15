@@ -14,7 +14,7 @@ export const Dashboard = () => {
   if (!profile) return null;
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
       <DashboardHeader />
       
       <main className="container mx-auto px-4 py-8">
@@ -23,16 +23,31 @@ export const Dashboard = () => {
             Welcome back, {profile.name}
           </h1>
           <p className="text-gray-600">
-            Share your weekly insights and track your impact
+            Transform your insights with EdgeVerve's intelligent analytics platform
           </p>
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-3 max-w-md">
-            <TabsTrigger value="upload">Upload Video</TabsTrigger>
-            <TabsTrigger value="insights">My Insights</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-3 max-w-md bg-white shadow-sm border border-gray-200">
+            <TabsTrigger 
+              value="upload" 
+              className="data-[state=active]:bg-blue-600 data-[state=active]:text-white"
+            >
+              Upload Content
+            </TabsTrigger>
+            <TabsTrigger 
+              value="insights"
+              className="data-[state=active]:bg-blue-600 data-[state=active]:text-white"
+            >
+              My Insights
+            </TabsTrigger>
             {profile.role === 'admin' && (
-              <TabsTrigger value="admin">Admin View</TabsTrigger>
+              <TabsTrigger 
+                value="admin"
+                className="data-[state=active]:bg-blue-600 data-[state=active]:text-white"
+              >
+                Admin Panel
+              </TabsTrigger>
             )}
           </TabsList>
 

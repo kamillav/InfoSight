@@ -25,11 +25,11 @@ export const DashboardHeader = () => {
   const getRoleColor = (role: string) => {
     switch (role) {
       case 'admin':
-        return 'bg-yellow-100 text-yellow-800';
+        return 'bg-yellow-100 text-yellow-800 border-yellow-200';
       case 'team_lead':
-        return 'bg-blue-100 text-blue-800';
+        return 'bg-blue-100 text-blue-800 border-blue-200';
       default:
-        return 'bg-gray-100 text-gray-800';
+        return 'bg-gray-100 text-gray-800 border-gray-200';
     }
   };
 
@@ -37,13 +37,13 @@ export const DashboardHeader = () => {
     <header className="bg-white border-b border-gray-200 shadow-sm">
       <div className="container mx-auto px-4 py-4">
         <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-purple-600 rounded-xl flex items-center justify-center">
-              <Zap className="w-5 h-5 text-white" />
+          <div className="flex items-center space-x-4">
+            <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
+              <Zap className="w-6 h-6 text-white" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Infosight</h1>
-              <p className="text-sm text-gray-600">Infosys Analytics Platform</p>
+              <h1 className="text-2xl font-bold text-gray-900">EdgeVerve</h1>
+              <p className="text-sm font-medium text-blue-600">Infosight Analytics Platform</p>
             </div>
           </div>
 
@@ -53,19 +53,19 @@ export const DashboardHeader = () => {
                 <p className="text-sm font-medium text-gray-900">Welcome, {profile?.name}</p>
                 {profile?.role === 'admin' && getRoleIcon(profile.role)}
               </div>
-              <Badge className={`text-xs ${getRoleColor(profile?.role || 'user')}`}>
+              <Badge className={`text-xs border ${getRoleColor(profile?.role || 'user')}`}>
                 {profile?.role?.replace('_', ' ').toUpperCase()}
               </Badge>
             </div>
             
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className="rounded-full">
+                <Button variant="ghost" size="sm" className="rounded-full hover:bg-blue-50">
                   <User className="w-4 h-4" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={signOut}>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem onClick={signOut} className="text-red-600 focus:text-red-700">
                   <LogOut className="w-4 h-4 mr-2" />
                   Sign Out
                 </DropdownMenuItem>

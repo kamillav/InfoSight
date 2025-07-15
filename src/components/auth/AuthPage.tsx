@@ -33,9 +33,9 @@ export const AuthPage = () => {
           return;
         }
         
-        const { data } = await signUp(email, password, name);
+        const result = await signUp(email, password, name);
         
-        if (data.user && !data.session) {
+        if (result?.user && !result?.session) {
           toast({
             title: "Check your email",
             description: "Please check your inbox and click the confirmation link to complete your registration.",
@@ -43,14 +43,14 @@ export const AuthPage = () => {
         } else {
           toast({
             title: "Account created successfully",
-            description: "Welcome to Infosight!"
+            description: "Welcome to EdgeVerve Infosight!"
           });
         }
       } else {
         await signIn(email, password);
         toast({
           title: "Signed in successfully",
-          description: "Welcome back to Infosight!"
+          description: "Welcome back to EdgeVerve Infosight!"
         });
       }
     } catch (error: any) {
@@ -79,25 +79,27 @@ export const AuthPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-600 to-purple-600 rounded-2xl mb-4 shadow-lg">
-            <Zap className="w-8 h-8 text-white" />
+          <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-2xl mb-4 shadow-lg">
+            <Zap className="w-10 h-10 text-white" />
           </div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Infosight</h1>
-          <p className="text-gray-600">Infosys Internal Analytics Platform</p>
+          <h1 className="text-4xl font-bold text-gray-900 mb-2">EdgeVerve</h1>
+          <p className="text-lg font-medium text-blue-600 mb-1">Infosight</p>
+          <p className="text-gray-600">Intelligent Analytics Platform</p>
+          <div className="w-16 h-1 bg-gradient-to-r from-blue-600 to-indigo-600 mx-auto mt-4 rounded-full"></div>
         </div>
 
-        <Card className="shadow-xl border-0 bg-white/80 backdrop-blur-sm">
-          <CardHeader className="text-center">
-            <CardTitle className="text-2xl">
-              {isSignUp ? 'Create Account' : 'Welcome Back'}
+        <Card className="shadow-2xl border-0 bg-white/90 backdrop-blur-sm">
+          <CardHeader className="text-center pb-4">
+            <CardTitle className="text-2xl text-gray-900">
+              {isSignUp ? 'Join EdgeVerve' : 'Welcome Back'}
             </CardTitle>
-            <CardDescription>
+            <CardDescription className="text-gray-600">
               {isSignUp 
-                ? 'Join the Infosight platform to share your weekly insights'
-                : 'Sign in to access your dashboard and insights'
+                ? 'Create your account to access intelligent analytics and insights'
+                : 'Sign in to continue to your analytics dashboard'
               }
             </CardDescription>
           </CardHeader>
@@ -105,7 +107,7 @@ export const AuthPage = () => {
             <form onSubmit={handleSubmit} className="space-y-4">
               {isSignUp && (
                 <div className="space-y-2">
-                  <Label htmlFor="name">Full Name</Label>
+                  <Label htmlFor="name" className="text-gray-700 font-medium">Full Name</Label>
                   <Input
                     id="name"
                     type="text"
@@ -113,24 +115,26 @@ export const AuthPage = () => {
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     required
+                    className="border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                   />
                 </div>
               )}
               
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email" className="text-gray-700 font-medium">Email Address</Label>
                 <Input
                   id="email"
                   type="email"
-                  placeholder="Enter your Infosys email"
+                  placeholder="Enter your email address"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
+                  className="border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                 />
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
+                <Label htmlFor="password" className="text-gray-700 font-medium">Password</Label>
                 <div className="relative">
                   <Input
                     id="password"
@@ -139,7 +143,7 @@ export const AuthPage = () => {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
-                    className="pr-10"
+                    className="pr-10 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                   />
                   <Button
                     type="button"
@@ -159,7 +163,7 @@ export const AuthPage = () => {
 
               <Button 
                 type="submit" 
-                className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+                className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-medium py-2.5"
                 disabled={loading}
               >
                 {loading ? (
@@ -177,7 +181,7 @@ export const AuthPage = () => {
               <Button
                 variant="link"
                 onClick={() => setIsSignUp(!isSignUp)}
-                className="text-sm"
+                className="text-sm text-blue-600 hover:text-blue-700"
               >
                 {isSignUp 
                   ? 'Already have an account? Sign in'
@@ -187,6 +191,10 @@ export const AuthPage = () => {
             </div>
           </CardContent>
         </Card>
+        
+        <div className="text-center mt-6">
+          <p className="text-sm text-gray-500">© 2024 EdgeVerve Systems Limited</p>
+        </div>
       </div>
     </div>
   );
