@@ -174,7 +174,7 @@ export const VideoUpload = () => {
       }
 
       // Create submission record in database with question context
-      const submissionNotes = `Question ${questionIndex + 1}: ${PRESET_QUESTIONS[questionIndex]}\n\nResponse: ${notes[questionIndex] || 'No additional notes provided.'}`;
+      const submissionNotes = `${PRESET_QUESTIONS[questionIndex]}\n\nResponse: ${notes[questionIndex] || 'No additional notes provided.'}`;
       
       const { data: submission, error: dbError } = await supabase
         .from('submissions')
