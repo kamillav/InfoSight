@@ -1,10 +1,9 @@
-
 import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Upload, Video, AlertCircle, CheckCircle, FileText, Calendar, User, PlayCircle, FileImage, MessageSquare } from 'lucide-react';
+import { Upload, Video, AlertCircle, CheckCircle, FileText, Calendar, User, PlayCircle, FileImage, MessageSquare, Plus, ChevronDown, ChevronUp } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
@@ -39,6 +38,7 @@ export const VideoUpload = () => {
   const [uploading, setUploading] = useState<boolean[]>([false, false, false]);
   const [processing, setProcessing] = useState<boolean[]>([false, false, false]);
   const [notes, setNotes] = useState(['', '', '']);
+  const [showNotes, setShowNotes] = useState<boolean[]>([false, false, false]);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loadingSubmissions, setLoadingSubmissions] = useState(true);
   const videoInputRefs = useRef<(HTMLInputElement | null)[]>([null, null, null]);
@@ -244,6 +244,12 @@ export const VideoUpload = () => {
     }
   };
 
+  const toggleNotes = (questionIndex: number) => {
+    const newShowNotes = [...showNotes];
+    newShowNotes[questionIndex] = !newShowNotes[questionIndex];
+    setShowNotes(newShowNotes);
+  };
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       weekday: 'long',
@@ -319,10 +325,10 @@ export const VideoUpload = () => {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Video className="w-5 h-5" />
-                  Question {index + 1}
-                </CardTitle>
-                <CardDescription className="text-sm font-medium text-gray-700">
                   {question}
+                </CardTitle>
+                <CardDescription className="text-sm font-medium text-gray-600">
+                  Question {index + 1}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -351,20 +357,39 @@ export const VideoUpload = () => {
                   )}
                 </div>
 
-                <div>
-                  <Label htmlFor={`notes-${index}`}>Additional Notes (Optional)</Label>
-                  <Textarea
-                    id={`notes-${index}`}
-                    placeholder="Add any additional context for this question..."
-                    value={notes[index]}
-                    onChange={(e) => {
-                      const newNotes = [...notes];
-                      newNotes[index] = e.target.value;
-                      setNotes(newNotes);
-                    }}
-                    rows={3}
-                  />
-                </div>
+                {/* Additional Notes Toggle Button */}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => toggleNotes(index)}
+                  className="w-full flex items-center justify-center gap-2 text-sm text-gray-600 hover:text-gray-800"
+                >
+                  <Plus className="w-4 h-4" />
+                  Additional Notes
+                  {showNotes[index] ? (
+                    <ChevronUp className="w-4 h-4" />
+                  ) : (
+                    <ChevronDown className="w-4 h-4" />
+                  )}
+                </Button>
+
+                {/* Collapsible Notes Section */}
+                {showNotes[index] && (
+                  <div className="space-y-2">
+                    <Label htmlFor={`notes-${index}`}>Additional Notes (Optional)</Label>
+                    <Textarea
+                      id={`notes-${index}`}
+                      placeholder="Add any additional context for this question..."
+                      value={notes[index]}
+                      onChange={(e) => {
+                        const newNotes = [...notes];
+                        newNotes[index] = e.target.value;
+                        setNotes(newNotes);
+                      }}
+                      rows={3}
+                    />
+                  </div>
+                )}
 
                 <Button
                   onClick={() => handleUpload(index)}
