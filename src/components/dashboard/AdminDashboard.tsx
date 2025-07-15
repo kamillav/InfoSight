@@ -6,6 +6,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { TrendingUp, Target, Users, MessageSquare, Calendar, FileText } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { ReprocessTranscriptsButton } from './ReprocessTranscriptsButton';
+import { DeleteSubmissionDialog } from './DeleteSubmissionDialog';
 
 interface UserSubmission {
   id: string;
@@ -76,6 +77,18 @@ export const AdminDashboard = () => {
         },
         (payload) => {
           console.log('Submission updated in dashboard:', payload);
+          fetchDashboardData();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'submissions'
+        },
+        (payload) => {
+          console.log('Submission deleted in dashboard:', payload);
           fetchDashboardData();
         }
       )
@@ -369,6 +382,72 @@ export const AdminDashboard = () => {
                 </div>
               </div>
             ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Recent Submissions with Delete Option */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Recent Submissions</CardTitle>
+          <CardDescription>Latest submissions from all users with management options</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b">
+                  <th className="text-left p-2">User</th>
+                  <th className="text-left p-2">Date</th>
+                  <th className="text-left p-2">KPIs</th>
+                  <th className="text-left p-2">Sentiment</th>
+                  <th className="text-left p-2">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredSubmissions.slice(0, 10).map(submission => (
+                  <tr key={submission.id} className="border-b hover:bg-gray-50">
+                    <td className="p-2">
+                      <div className="flex items-center gap-2">
+                        <div 
+                          className="w-3 h-3 rounded-full"
+                          style={{ backgroundColor: userColors[submission.user_id] || '#6b7280' }}
+                        />
+                        <div>
+                          <p className="font-medium">{submission.profiles?.name || 'Unknown'}</p>
+                          <p className="text-sm text-gray-600">{submission.profiles?.email || 'Unknown'}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="p-2">
+                      <p className="text-sm">{new Date(submission.created_at).toLocaleDateString()}</p>
+                      <p className="text-xs text-gray-600">{new Date(submission.created_at).toLocaleTimeString()}</p>
+                    </td>
+                    <td className="p-2">
+                      <Badge variant="default">{submission.extracted_kpis?.length || 0}</Badge>
+                    </td>
+                    <td className="p-2">
+                      <Badge 
+                        variant={
+                          submission.sentiment === 'positive' ? 'default' : 
+                          submission.sentiment === 'negative' ? 'destructive' : 'secondary'
+                        }
+                      >
+                        {submission.sentiment || 'neutral'}
+                      </Badge>
+                    </td>
+                    <td className="p-2">
+                      <DeleteSubmissionDialog
+                        submissionId={submission.id}
+                        submissionDate={submission.created_at}
+                        userName={submission.profiles?.name || 'Unknown User'}
+                        onDeleteSuccess={fetchDashboardData}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </CardContent>
       </Card>
