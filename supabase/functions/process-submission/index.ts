@@ -22,16 +22,18 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
   ]);
 }
 
-// Function to extract text from PDF using OpenAI's document processing
+// Enhanced function to extract text from PDF using OpenAI's document processing
 async function extractPDFText(pdfData: Blob, openaiApiKey: string): Promise<string> {
   try {
-    console.log('Extracting text from PDF using OpenAI...');
+    console.log('Starting PDF text extraction using OpenAI...');
     
     // Convert PDF to base64 for OpenAI API
     const arrayBuffer = await pdfData.arrayBuffer();
     const uint8Array = new Uint8Array(arrayBuffer);
     const base64String = btoa(String.fromCharCode(...uint8Array));
     
+    console.log('PDF converted to base64, size:', base64String.length);
+
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -43,14 +45,14 @@ async function extractPDFText(pdfData: Blob, openaiApiKey: string): Promise<stri
         messages: [
           {
             role: 'system',
-            content: 'You are a document processing assistant. Extract all text content from the provided PDF document. Focus on preserving numerical data, metrics, KPIs, financial figures, dates, and any quantifiable information. Return only the extracted text content without any commentary.'
+            content: 'You are a document processing assistant specializing in extracting business metrics and KPIs. Extract ALL text content from the provided PDF document, with special focus on numerical data, financial figures, performance metrics, percentages, dates, targets, and quantifiable business information. Preserve the structure and context of numbers. Return only the extracted text content without commentary.'
           },
           {
             role: 'user',
             content: [
               {
                 type: 'text',
-                text: 'Please extract all text from this PDF document, paying special attention to numbers, metrics, KPIs, and quantifiable data:'
+                text: 'Please extract all text from this PDF document. Pay special attention to:\n- Revenue figures and financial data\n- Performance metrics and KPIs\n- Percentages and growth rates\n- Targets and goals\n- Dates and time periods\n- Any quantifiable business data\n\nExtract the complete text content:'
               },
               {
                 type: 'image_url',
@@ -66,6 +68,8 @@ async function extractPDFText(pdfData: Blob, openaiApiKey: string): Promise<stri
       }),
     });
 
+    console.log('OpenAI PDF processing response status:', response.status);
+
     if (!response.ok) {
       const errorText = await response.text();
       console.error('OpenAI PDF processing error:', errorText);
@@ -74,13 +78,16 @@ async function extractPDFText(pdfData: Blob, openaiApiKey: string): Promise<stri
 
     const result = await response.json();
     const extractedText = result.choices[0]?.message?.content || '';
-    console.log('PDF text extraction completed, extracted length:', extractedText.length);
+    console.log('PDF text extraction completed successfully');
+    console.log('Extracted text preview:', extractedText.substring(0, 500) + '...');
+    console.log('Total extracted text length:', extractedText.length);
+    
     return extractedText;
     
   } catch (error) {
     console.error('PDF text extraction failed:', error);
-    // Return a fallback description instead of throwing
-    return 'PDF document uploaded but text extraction failed. Document contains supporting materials for this submission.';
+    // Return a descriptive fallback instead of empty string
+    return 'PDF document was uploaded but text extraction encountered an error. Please check the document format and try again.';
   }
 }
 
@@ -117,6 +124,7 @@ serve(async (req) => {
     }
 
     console.log('Found submission:', submission.id);
+    console.log('PDF file present:', !!submission.pdf_file);
 
     let fullTranscript = '';
     const videoFile = submission.video_files;
@@ -198,8 +206,10 @@ serve(async (req) => {
       throw new Error(`Video processing failed: ${error.message}`);
     }
 
-    // Process PDF if present with proper text extraction
+    // Process PDF if present with enhanced text extraction
     let pdfText = '';
+    let pdfProcessingSuccess = false;
+    
     if (submission.pdf_file) {
       try {
         console.log('Processing PDF file:', submission.pdf_file);
@@ -210,60 +220,74 @@ serve(async (req) => {
         if (!pdfError && pdfData) {
           console.log('PDF downloaded successfully, size:', pdfData.size);
           
-          // Extract text from PDF using OpenAI
+          // Extract text from PDF using OpenAI with enhanced processing
           pdfText = await extractPDFText(pdfData, openaiApiKey);
-          console.log('PDF text extracted successfully, length:', pdfText.length);
+          
+          if (pdfText && pdfText.length > 50 && !pdfText.includes('extraction encountered an error')) {
+            pdfProcessingSuccess = true;
+            console.log('PDF text extracted successfully, length:', pdfText.length);
+            console.log('PDF content preview:', pdfText.substring(0, 300) + '...');
+          } else {
+            console.warn('PDF text extraction returned minimal or error content');
+            pdfText = 'PDF document was uploaded but minimal content could be extracted.';
+          }
         } else {
           console.warn('PDF download failed:', pdfError);
-          pdfText = 'PDF document was uploaded but could not be processed.';
+          pdfText = 'PDF document was uploaded but could not be downloaded for processing.';
         }
       } catch (error) {
         console.error('Error processing PDF:', error);
-        pdfText = 'PDF document was uploaded but text extraction encountered an error.';
+        pdfText = `PDF document was uploaded but processing failed: ${error.message}`;
       }
     }
 
-    // Enhanced analysis prompt that specifically incorporates PDF content
+    // Enhanced analysis prompt that specifically incorporates PDF content and emphasizes KPI extraction
     const analysisPrompt = `
-Analyze the following content from a business submission and extract specific, measurable KPIs and insights:
+You are analyzing a comprehensive business submission with multiple content sources. Your primary goal is to extract specific, measurable KPIs and business metrics from ALL sources provided.
 
-VIDEO TRANSCRIPT:
-${fullTranscript}
+CONTENT SOURCES:
 
-PDF DOCUMENT CONTENT:
-${pdfText}
+1. VIDEO TRANSCRIPT:
+${fullTranscript || 'No video transcript available'}
 
-ADDITIONAL NOTES:
-${submission.notes || 'None'}
+2. PDF DOCUMENT CONTENT${pdfProcessingSuccess ? ' (Successfully Extracted)' : ' (Limited Extraction)'}:
+${pdfText || 'No PDF content available'}
 
-INSTRUCTIONS:
-Please analyze ALL content sources (video transcript, PDF document, and notes) to extract comprehensive business metrics and insights. Pay special attention to:
+3. ADDITIONAL NOTES:
+${submission.notes || 'No additional notes provided'}
 
-1. Numerical data from both video and PDF (revenue, costs, percentages, quantities, timeframes)
-2. Performance metrics mentioned in either source
-3. Business goals and targets from the documents
-4. Comparative data (before/after, growth rates, improvements)
-5. Key achievements highlighted across all materials
+ANALYSIS INSTRUCTIONS:
+
+Please conduct a thorough analysis of ALL content sources above to extract comprehensive business metrics and insights. Focus heavily on:
+
+1. **NUMERICAL DATA EXTRACTION**: Find all numbers, percentages, monetary values, quantities, timeframes, and measurable metrics from video, PDF, and notes
+2. **FINANCIAL METRICS**: Revenue, costs, profits, budgets, ROI, growth rates, market share
+3. **PERFORMANCE INDICATORS**: Customer metrics, operational efficiency, quality scores, productivity measures
+4. **COMPARATIVE DATA**: Before/after comparisons, year-over-year growth, benchmarks, targets vs. actuals
+5. **TIME-BASED METRICS**: Quarterly results, monthly performance, project timelines
+6. **PDF-SPECIFIC DATA**: Pay special attention to structured data, tables, charts, and formal reports in the PDF
+
+IMPORTANT: If PDF content was successfully extracted, prioritize finding KPIs from both video and PDF sources equally. The PDF often contains more structured and detailed metrics.
 
 Extract and format the following in JSON:
 
-1. KEY POINTS: 5-7 main achievements or important business insights from ALL sources
-2. EXTRACTED KPIS: Specific, measurable metrics found in the content (e.g., "Revenue: $50,000", "Customer acquisition: 25 new clients", "Response time: 1.2 seconds", "Conversion rate: 15%", "Cost reduction: 20%"). Include metrics from both video and PDF.
-3. SENTIMENT: Overall business sentiment (positive, neutral, or negative)
-4. NOTABLE QUOTES: 2-4 impactful direct quotes from the video transcript or key statements from the PDF
+1. **KEY_POINTS**: 5-7 main business achievements, goals, or important insights from ALL sources
+2. **EXTRACTED_KPIS**: Specific, measurable metrics with format "Metric Name: Value Unit" (e.g., "Revenue: $50,000", "Customer Growth: 25%", "Processing Time: 2.5 hours", "Market Share: 15%"). Include ALL quantifiable data found.
+3. **SENTIMENT**: Overall business sentiment (positive, neutral, or negative)
+4. **NOTABLE_QUOTES**: 2-4 impactful direct quotes from video transcript or key statements from PDF/notes
 
-Focus on finding actual numbers, percentages, monetary values, time measurements, and quantifiable achievements from ALL provided sources.
+Focus on extracting ACTUAL NUMBERS and QUANTIFIABLE ACHIEVEMENTS from all sources, especially the PDF content.
 
 Respond ONLY with this JSON format:
 {
-  "key_points": ["point1", "point2", "point3", "point4", "point5"],
-  "extracted_kpis": ["Revenue: $50,000", "Customers: 25 new acquisitions", "Response time: 1.2 seconds"],
-  "sentiment": "positive",
-  "ai_quotes": ["quote1", "quote2", "quote3"]
+  "key_points": ["Achievement or insight 1", "Achievement or insight 2", "Achievement or insight 3", "Achievement or insight 4", "Achievement or insight 5"],
+  "extracted_kpis": ["Revenue: $X", "Growth Rate: X%", "Customer Count: X users", "Efficiency: X%"],
+  "sentiment": "positive|neutral|negative",
+  "ai_quotes": ["Quote from video or key PDF statement 1", "Quote 2", "Quote 3"]
 }
 `;
 
-    console.log('Sending comprehensive analysis to GPT-4...');
+    console.log('Sending comprehensive analysis to GPT-4 with enhanced PDF focus...');
 
     const analysisResponse = await withTimeout(
       fetch('https://api.openai.com/v1/chat/completions', {
@@ -277,7 +301,7 @@ Respond ONLY with this JSON format:
           messages: [
             {
               role: 'system',
-              content: 'You are an AI assistant that analyzes business submissions including video transcripts and PDF documents to extract specific, measurable KPIs and insights. Always respond with valid JSON only. Focus on finding concrete numbers, metrics, and quantifiable achievements from ALL provided content sources.'
+              content: 'You are an expert business analyst that specializes in extracting specific, measurable KPIs and metrics from various content sources including video transcripts, PDF documents, and text notes. Always respond with valid JSON only. Focus on finding concrete numbers, percentages, monetary values, and quantifiable business achievements from ALL provided content sources, with special attention to PDF content which often contains structured data.'
             },
             {
               role: 'user',
@@ -308,36 +332,54 @@ Respond ONLY with this JSON format:
         const gptResponse = await analysisResponse.json();
         const content = gptResponse.choices[0]?.message?.content;
         if (content) {
+          console.log('Raw GPT response content:', content);
           analysisResult = JSON.parse(content);
           console.log('Comprehensive analysis completed successfully:', analysisResult);
+          console.log('Extracted KPIs count:', analysisResult.extracted_kpis?.length || 0);
+          if (analysisResult.extracted_kpis?.length > 0) {
+            console.log('Sample KPIs:', analysisResult.extracted_kpis.slice(0, 3));
+          }
         } else {
           console.error('No content in GPT-4 response');
         }
       } catch (parseError) {
         console.error('Error parsing GPT response:', parseError);
+        console.log('Raw content that failed to parse:', gptResponse.choices[0]?.message?.content);
         console.warn('Using default analysis result due to parsing error');
       }
     }
 
-    // Update submission with results including PDF processing indicator
+    // Update submission with results including PDF processing status
     console.log('Updating submission with comprehensive results...');
+    const updateData = {
+      transcript: fullTranscript,
+      key_points: analysisResult.key_points,
+      extracted_kpis: analysisResult.extracted_kpis,
+      sentiment: analysisResult.sentiment,
+      ai_quotes: analysisResult.ai_quotes,
+      status: 'completed',
+      updated_at: new Date().toISOString(),
+    };
+
+    console.log('Update data being saved:', {
+      ...updateData,
+      transcript: `${fullTranscript.length} characters`,
+      key_points_count: analysisResult.key_points?.length,
+      kpis_count: analysisResult.extracted_kpis?.length,
+      quotes_count: analysisResult.ai_quotes?.length
+    });
+
     const { error: updateError } = await supabase
       .from('submissions')
-      .update({
-        transcript: fullTranscript,
-        key_points: analysisResult.key_points,
-        extracted_kpis: analysisResult.extracted_kpis,
-        sentiment: analysisResult.sentiment,
-        ai_quotes: analysisResult.ai_quotes,
-        status: 'completed',
-        updated_at: new Date().toISOString(),
-      })
+      .update(updateData)
       .eq('id', submissionId);
 
     if (updateError) {
       console.error('Error updating submission:', updateError);
       throw updateError;
     }
+
+    console.log('Submission updated successfully');
 
     // Delete the video file after successful processing to save storage space
     try {
@@ -355,13 +397,21 @@ Respond ONLY with this JSON format:
       console.error('Error during file deletion:', deleteError);
     }
 
-    console.log('Submission processed successfully with PDF analysis:', submissionId);
+    const responseMessage = pdfProcessingSuccess 
+      ? 'Submission processed successfully with comprehensive PDF and video analysis'
+      : 'Submission processed successfully with video analysis and limited PDF processing';
+
+    console.log('Processing completed:', responseMessage);
 
     return new Response(
       JSON.stringify({ 
         success: true, 
-        message: 'Submission processed successfully with PDF content analysis',
-        pdfProcessed: !!pdfText && pdfText.length > 50 // Indicates if meaningful PDF content was extracted
+        message: responseMessage,
+        pdfProcessed: pdfProcessingSuccess,
+        kpisExtracted: analysisResult.extracted_kpis?.length || 0,
+        videoProcessed: !!fullTranscript,
+        transcriptLength: fullTranscript.length,
+        pdfContentLength: pdfText.length
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
@@ -384,7 +434,7 @@ Respond ONLY with this JSON format:
           })
           .eq('id', submissionId);
         
-        console.log('Updated submission status to error for:', submissionId);
+        console.log('Updated submission status to failed for:', submissionId);
       }
     } catch (updateError) {
       console.error('Error updating failed status:', updateError);
