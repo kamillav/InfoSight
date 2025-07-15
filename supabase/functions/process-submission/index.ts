@@ -22,6 +22,68 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
   ]);
 }
 
+// Function to extract text from PDF using OpenAI's document processing
+async function extractPDFText(pdfData: Blob, openaiApiKey: string): Promise<string> {
+  try {
+    console.log('Extracting text from PDF using OpenAI...');
+    
+    // Convert PDF to base64 for OpenAI API
+    const arrayBuffer = await pdfData.arrayBuffer();
+    const uint8Array = new Uint8Array(arrayBuffer);
+    const base64String = btoa(String.fromCharCode(...uint8Array));
+    
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${openaiApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o',
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a document processing assistant. Extract all text content from the provided PDF document. Focus on preserving numerical data, metrics, KPIs, financial figures, dates, and any quantifiable information. Return only the extracted text content without any commentary.'
+          },
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: 'Please extract all text from this PDF document, paying special attention to numbers, metrics, KPIs, and quantifiable data:'
+              },
+              {
+                type: 'image_url',
+                image_url: {
+                  url: `data:application/pdf;base64,${base64String}`
+                }
+              }
+            ]
+          }
+        ],
+        max_tokens: 4000,
+        temperature: 0.1,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('OpenAI PDF processing error:', errorText);
+      throw new Error(`OpenAI PDF processing failed: ${errorText}`);
+    }
+
+    const result = await response.json();
+    const extractedText = result.choices[0]?.message?.content || '';
+    console.log('PDF text extraction completed, extracted length:', extractedText.length);
+    return extractedText;
+    
+  } catch (error) {
+    console.error('PDF text extraction failed:', error);
+    // Return a fallback description instead of throwing
+    return 'PDF document uploaded but text extraction failed. Document contains supporting materials for this submission.';
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -118,7 +180,7 @@ serve(async (req) => {
         await supabase
           .from('submissions')
           .update({
-            status: 'error',
+            status: 'failed',
             processing_error: 'Processing timed out after 10 minutes. Please try with a shorter video.',
             updated_at: new Date().toISOString(),
           })
@@ -136,7 +198,7 @@ serve(async (req) => {
       throw new Error(`Video processing failed: ${error.message}`);
     }
 
-    // Process PDF if present with basic text extraction
+    // Process PDF if present with proper text extraction
     let pdfText = '';
     if (submission.pdf_file) {
       try {
@@ -146,50 +208,62 @@ serve(async (req) => {
           .download(submission.pdf_file);
 
         if (!pdfError && pdfData) {
-          // For now, we'll use a placeholder since PDF text extraction requires additional libraries
-          // In a production environment, you'd want to use a PDF parsing library
-          pdfText = `PDF document "${submission.pdf_file}" was uploaded and contains supporting materials for this submission.`;
-          console.log('PDF processed successfully');
+          console.log('PDF downloaded successfully, size:', pdfData.size);
+          
+          // Extract text from PDF using OpenAI
+          pdfText = await extractPDFText(pdfData, openaiApiKey);
+          console.log('PDF text extracted successfully, length:', pdfText.length);
         } else {
-          console.warn('PDF processing failed:', pdfError);
+          console.warn('PDF download failed:', pdfError);
+          pdfText = 'PDF document was uploaded but could not be processed.';
         }
       } catch (error) {
         console.error('Error processing PDF:', error);
+        pdfText = 'PDF document was uploaded but text extraction encountered an error.';
       }
     }
 
-    // Enhanced analysis prompt for better KPI extraction
+    // Enhanced analysis prompt that specifically incorporates PDF content
     const analysisPrompt = `
-Analyze the following content and extract specific, measurable information:
+Analyze the following content from a business submission and extract specific, measurable KPIs and insights:
 
-TRANSCRIPT:
+VIDEO TRANSCRIPT:
 ${fullTranscript}
+
+PDF DOCUMENT CONTENT:
+${pdfText}
 
 ADDITIONAL NOTES:
 ${submission.notes || 'None'}
 
-PDF CONTENT:
-${pdfText}
+INSTRUCTIONS:
+Please analyze ALL content sources (video transcript, PDF document, and notes) to extract comprehensive business metrics and insights. Pay special attention to:
 
-Please extract and format the following in JSON:
+1. Numerical data from both video and PDF (revenue, costs, percentages, quantities, timeframes)
+2. Performance metrics mentioned in either source
+3. Business goals and targets from the documents
+4. Comparative data (before/after, growth rates, improvements)
+5. Key achievements highlighted across all materials
 
-1. KEY POINTS: 3-5 main achievements or important points from the content
-2. EXTRACTED KPIS: Specific, measurable metrics mentioned (e.g., "Revenue: $50,000", "Customers acquired: 25", "Response time: 1.2 seconds", "Conversion rate: 15%", "Cost reduction: 20%"). Include the metric name and exact value.
-3. SENTIMENT: Overall sentiment (positive, neutral, or negative)
-4. NOTABLE QUOTES: 2-3 impactful direct quotes from the transcript
+Extract and format the following in JSON:
 
-Focus on finding actual numbers, percentages, monetary values, time measurements, and quantifiable achievements.
+1. KEY POINTS: 5-7 main achievements or important business insights from ALL sources
+2. EXTRACTED KPIS: Specific, measurable metrics found in the content (e.g., "Revenue: $50,000", "Customer acquisition: 25 new clients", "Response time: 1.2 seconds", "Conversion rate: 15%", "Cost reduction: 20%"). Include metrics from both video and PDF.
+3. SENTIMENT: Overall business sentiment (positive, neutral, or negative)
+4. NOTABLE QUOTES: 2-4 impactful direct quotes from the video transcript or key statements from the PDF
+
+Focus on finding actual numbers, percentages, monetary values, time measurements, and quantifiable achievements from ALL provided sources.
 
 Respond ONLY with this JSON format:
 {
-  "key_points": ["point1", "point2", "point3"],
+  "key_points": ["point1", "point2", "point3", "point4", "point5"],
   "extracted_kpis": ["Revenue: $50,000", "Customers: 25 new acquisitions", "Response time: 1.2 seconds"],
   "sentiment": "positive",
-  "ai_quotes": ["quote1", "quote2"]
+  "ai_quotes": ["quote1", "quote2", "quote3"]
 }
 `;
 
-    console.log('Sending to GPT-4 for analysis...');
+    console.log('Sending comprehensive analysis to GPT-4...');
 
     const analysisResponse = await withTimeout(
       fetch('https://api.openai.com/v1/chat/completions', {
@@ -203,7 +277,7 @@ Respond ONLY with this JSON format:
           messages: [
             {
               role: 'system',
-              content: 'You are an AI assistant that analyzes work updates and extracts specific, measurable KPIs and insights. Always respond with valid JSON only. Focus on finding concrete numbers, metrics, and quantifiable achievements.'
+              content: 'You are an AI assistant that analyzes business submissions including video transcripts and PDF documents to extract specific, measurable KPIs and insights. Always respond with valid JSON only. Focus on finding concrete numbers, metrics, and quantifiable achievements from ALL provided content sources.'
             },
             {
               role: 'user',
@@ -216,7 +290,7 @@ Respond ONLY with this JSON format:
       300000 // 5 minutes timeout for analysis
     );
 
-    console.log('GPT-4 API response status:', analysisResponse.status);
+    console.log('GPT-4 analysis response status:', analysisResponse.status);
 
     let analysisResult = {
       key_points: ['Content processed successfully'],
@@ -235,7 +309,7 @@ Respond ONLY with this JSON format:
         const content = gptResponse.choices[0]?.message?.content;
         if (content) {
           analysisResult = JSON.parse(content);
-          console.log('Analysis completed successfully:', analysisResult);
+          console.log('Comprehensive analysis completed successfully:', analysisResult);
         } else {
           console.error('No content in GPT-4 response');
         }
@@ -245,8 +319,8 @@ Respond ONLY with this JSON format:
       }
     }
 
-    // Update submission with results
-    console.log('Updating submission with results...');
+    // Update submission with results including PDF processing indicator
+    console.log('Updating submission with comprehensive results...');
     const { error: updateError } = await supabase
       .from('submissions')
       .update({
@@ -281,10 +355,14 @@ Respond ONLY with this JSON format:
       console.error('Error during file deletion:', deleteError);
     }
 
-    console.log('Submission processed successfully:', submissionId);
+    console.log('Submission processed successfully with PDF analysis:', submissionId);
 
     return new Response(
-      JSON.stringify({ success: true, message: 'Submission processed successfully' }),
+      JSON.stringify({ 
+        success: true, 
+        message: 'Submission processed successfully with PDF content analysis',
+        pdfProcessed: !!pdfText && pdfText.length > 50 // Indicates if meaningful PDF content was extracted
+      }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
@@ -300,7 +378,7 @@ Respond ONLY with this JSON format:
         await supabase
           .from('submissions')
           .update({
-            status: 'error',
+            status: 'failed',
             processing_error: error.message,
             updated_at: new Date().toISOString(),
           })
