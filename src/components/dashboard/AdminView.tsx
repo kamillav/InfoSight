@@ -414,14 +414,17 @@ export const AdminView = () => {
     .sort((a, b) => b.count - a.count)
     .slice(0, 15); // Show more KPIs
 
-  // Enhanced sentiment analysis data
+  // Enhanced sentiment analysis data - fix the interface mismatch
   const sentimentData = [
-    { name: 'Positive', value: positiveSubmissions.length, color: '#22C55E' },
-    { name: 'Neutral', value: completedSubmissions.filter(s => s.sentiment === 'neutral').length, color: '#6B7280' },
-    { name: 'Negative', value: completedSubmissions.filter(s => s.sentiment === 'negative').length, color: '#EF4444' }
+    { 
+      date: new Date().toISOString(), 
+      positive: completedSubmissions.length > 0 ? Math.round((positiveSubmissions.length / completedSubmissions.length) * 100) : 0,
+      neutral: completedSubmissions.length > 0 ? Math.round((completedSubmissions.filter(s => s.sentiment === 'neutral').length / completedSubmissions.length) * 100) : 0,
+      negative: completedSubmissions.length > 0 ? Math.round((completedSubmissions.filter(s => s.sentiment === 'negative').length / completedSubmissions.length) * 100) : 0
+    }
   ];
 
-  // Word cloud data from key points
+  // Word cloud data from key points - fix the interface mismatch
   const wordCloudData = completedSubmissions
     .flatMap(s => s.key_points || [])
     .join(' ')
@@ -434,8 +437,8 @@ export const AdminView = () => {
     }, {});
 
   const topWords = Object.entries(wordCloudData)
-    .map(([text, value]) => ({ text, value }))
-    .sort((a, b) => b.value - a.value)
+    .map(([word, frequency]) => ({ word, frequency }))
+    .sort((a, b) => b.frequency - a.frequency)
     .slice(0, 50);
 
   if (loading) {
@@ -557,7 +560,7 @@ export const AdminView = () => {
                 <CardDescription>Distribution of sentiment across all submissions</CardDescription>
               </CardHeader>
               <CardContent>
-                {sentimentData.some(d => d.value > 0) ? (
+                {sentimentData[0] && (sentimentData[0].positive > 0 || sentimentData[0].neutral > 0 || sentimentData[0].negative > 0) ? (
                   <SentimentChart data={sentimentData} />
                 ) : (
                   <p className="text-gray-500 text-center py-8">No sentiment data available yet</p>
