@@ -242,7 +242,7 @@ export const VideoUpload = () => {
             },
             pdf_file: pdfFileName,
             notes: submissionNotes,
-            status: 'uploaded' // Start with 'uploaded' status, not 'processing'
+            status: 'processing' // Changed from 'uploaded' to 'processing'
           })
           .select()
           .single();
@@ -265,12 +265,6 @@ export const VideoUpload = () => {
         
         setProcessingStatus(`Processing video ${i + 1}/${submissionIds.length} (Question: ${PRESET_QUESTIONS[questionIndex] || 'Unknown'})...`);
         
-        // Update status to processing
-        await supabase
-          .from('submissions')
-          .update({ status: 'processing' })
-          .eq('id', submissionId);
-
         console.log(`Processing submission ${i + 1}/${submissionIds.length}: ${submissionId}`);
         
         try {
@@ -284,7 +278,7 @@ export const VideoUpload = () => {
             await supabase
               .from('submissions')
               .update({ 
-                status: 'error', 
+                status: 'failed', 
                 processing_error: `Processing function error: ${processingError.message}` 
               })
               .eq('id', submissionId);
