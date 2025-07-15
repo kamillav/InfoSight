@@ -90,7 +90,7 @@ export const VideoUpload = () => {
         return;
       }
       
-      if (file.size > 200 * 1024 * 1024) { // 200MB limit
+      if (file.size > 25 * 1024 * 1024) { // 200MB limit
         toast({
           title: "File too large",
           description: "Please select a video under 25MB.",
