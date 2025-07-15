@@ -46,8 +46,11 @@ export const useAuth = () => {
       }
 
       const userProfile: UserProfile = {
-        ...profileData,
-        role: roleData?.role || 'user'
+        id: profileData.id,
+        email: profileData.email,
+        name: profileData.name,
+        role: roleData?.role || 'user',
+        created_at: profileData.created_at || new Date().toISOString()
       };
 
       console.log('Fetched user profile:', userProfile);

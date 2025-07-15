@@ -1,4 +1,3 @@
-
 import { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -24,7 +23,7 @@ export const VideoUpload = () => {
   const videoInputRef = useRef<HTMLInputElement>(null);
   const pdfInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
 
   const handleVideoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -79,7 +78,7 @@ export const VideoUpload = () => {
   };
 
   const handleUpload = async () => {
-    if (!selectedVideo || !user) {
+    if (!selectedVideo || !user || !profile) {
       toast({
         title: "Missing required files",
         description: "Please select a video file before uploading.",
@@ -92,7 +91,7 @@ export const VideoUpload = () => {
     setProcessing(true);
 
     try {
-      console.log('Processing submission for user:', user.name);
+      console.log('Processing submission for user:', profile.name);
       console.log('Video file:', selectedVideo.name, selectedVideo.size);
       if (selectedPDF) {
         console.log('PDF file:', selectedPDF.name, selectedPDF.size);
@@ -114,22 +113,22 @@ export const VideoUpload = () => {
       const mockSubmission = {
         id: Date.now().toString(),
         userId: user.id,
-        userName: user.name,
+        userName: profile.name,
         date: new Date().toISOString(),
         videoFile: selectedVideo.name,
         pdfFile: selectedPDF?.name || null,
         notes: notes,
-        transcript: `Mock transcript for ${user.name}'s submission on ${new Date().toLocaleDateString()}. This would contain the actual video transcription.`,
+        transcript: `Mock transcript for ${profile.name}'s submission on ${new Date().toLocaleDateString()}. This would contain the actual video transcription.`,
         keyPoints: [
-          `Key achievement mentioned by ${user.name}`,
+          `Key achievement mentioned by ${profile.name}`,
           `Challenge overcome this week`,
           `Specific metric or KPI improvement noted`
         ],
         kpis: ['Custom KPI 1', 'Custom KPI 2', 'Performance Metric'],
         sentiment: 'positive' as const,
         quotes: [
-          `"This week was very productive" - ${user.name}`,
-          `"We achieved significant improvement in our key metrics" - ${user.name}`
+          `"This week was very productive" - ${profile.name}`,
+          `"We achieved significant improvement in our key metrics" - ${profile.name}`
         ],
         processed: true
       };
@@ -141,7 +140,7 @@ export const VideoUpload = () => {
 
       toast({
         title: "Submission processed successfully!",
-        description: `Your insights have been analyzed and saved, ${user.name}.`,
+        description: `Your insights have been analyzed and saved, ${profile.name}.`,
       });
 
       // Reset form
