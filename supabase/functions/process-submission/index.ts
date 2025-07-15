@@ -197,6 +197,24 @@ Please respond in this JSON format:
       throw updateError;
     }
 
+    // Delete the video file after successful processing to save storage space
+    try {
+      console.log('Deleting video file to save storage space:', videoFile.path);
+      const { error: deleteError } = await supabase.storage
+        .from('submissions')
+        .remove([videoFile.path]);
+
+      if (deleteError) {
+        console.error('Error deleting video file:', deleteError);
+        // Don't throw error here - the processing was successful
+      } else {
+        console.log('Video file deleted successfully');
+      }
+    } catch (deleteError) {
+      console.error('Error during file deletion:', deleteError);
+      // Don't throw error here - the processing was successful
+    }
+
     console.log('Submission processed successfully:', submissionId);
 
     return new Response(
