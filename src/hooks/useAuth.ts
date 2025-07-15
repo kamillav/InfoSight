@@ -45,12 +45,17 @@ export const useAuth = () => {
         throw roleError;
       }
 
+      if (!profileData) {
+        console.error('No profile data found');
+        return null;
+      }
+
       const userProfile: UserProfile = {
         id: profileData.id,
         email: profileData.email,
         name: profileData.name,
         role: roleData?.role || 'user',
-        created_at: profileData.created_at || new Date().toISOString()
+        created_at: profileData.created_at
       };
 
       console.log('Fetched user profile:', userProfile);
