@@ -43,7 +43,7 @@ export const DashboardHeader = () => {
             </div>
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Infosight</h1>
-              <p className="text-sm font-medium text-blue-600">Infosys Analytics Platform</p>
+              <p className="text-sm font-medium text-blue-600">Infosys Team Analytics Platform</p>
             </div>
           </div>
 
