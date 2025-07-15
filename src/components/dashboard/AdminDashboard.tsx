@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -6,6 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, Legend } from 'recharts';
 import { TrendingUp, Target, Users, MessageSquare, Calendar, FileText } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { ReprocessTranscriptsButton } from './ReprocessTranscriptsButton';
 
 interface UserSubmission {
   id: string;
@@ -238,17 +238,20 @@ export const AdminDashboard = () => {
       {/* Controls */}
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold">Admin Dashboard</h2>
-        <Select value={selectedTimeframe} onValueChange={setSelectedTimeframe}>
-          <SelectTrigger className="w-40">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Time</SelectItem>
-            <SelectItem value="7d">Last 7 Days</SelectItem>
-            <SelectItem value="30d">Last 30 Days</SelectItem>
-            <SelectItem value="90d">Last 90 Days</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="flex items-center gap-4">
+          <ReprocessTranscriptsButton />
+          <Select value={selectedTimeframe} onValueChange={setSelectedTimeframe}>
+            <SelectTrigger className="w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Time</SelectItem>
+              <SelectItem value="7d">Last 7 Days</SelectItem>
+              <SelectItem value="30d">Last 30 Days</SelectItem>
+              <SelectItem value="90d">Last 90 Days</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {/* Summary Stats */}
