@@ -15,7 +15,7 @@ interface Submission {
   created_at: string;
   updated_at: string;
   video_files: Json;
-  pdf_file?: string | null;
+  docx_file?: string | null;
   notes: string | null;
   transcript: Json | null;
   key_points: string[] | null;
@@ -127,7 +127,7 @@ export const InsightsView = ({ userId }: InsightsViewProps) => {
         <div className="text-center">
           <MessageSquare className="w-12 h-12 text-gray-400 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-gray-900 mb-2">No submissions yet</h3>
-          <p className="text-gray-600">Upload your first videos to see insights here.</p>
+          <p className="text-gray-600">Upload your first videos with DOCX files to see insights here.</p>
         </div>
       </div>
     );
@@ -210,10 +210,10 @@ export const InsightsView = ({ userId }: InsightsViewProps) => {
                       {submission.status === 'processing' && <Clock className="w-3 h-3 mr-1" />}
                       {submission.status}
                     </Badge>
-                    {submission.pdf_file && (
+                    {submission.docx_file && (
                       <Badge variant="outline" className="text-xs">
                         <FileText className="w-3 h-3 mr-1" />
-                        PDF Included
+                        DOCX Included
                       </Badge>
                     )}
                     {submission.sentiment && (
@@ -274,7 +274,7 @@ export const InsightsView = ({ userId }: InsightsViewProps) => {
                         )}
                         <div className="text-xs text-gray-500">
                           <p>Videos: {getVideoFilesDisplay(submission.video_files)}</p>
-                          {submission.pdf_file && <p>PDF: Document included</p>}
+                          {submission.docx_file && <p>DOCX: Document included</p>}
                         </div>
                       </div>
                     </TabsContent>

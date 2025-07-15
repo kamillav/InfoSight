@@ -12,12 +12,12 @@ export const KPIVisualizations = ({ submissions }: KPIVisualizationsProps) => {
   const processKPIData = () => {
     const kpiMap = new Map();
     const timelineData = [];
-    const sourceStats = { video: 0, pdf: 0, mixed: 0 };
+    const sourceStats = { video: 0, docx: 0, mixed: 0 };
     
     submissions.forEach((submission) => {
       if (submission.extracted_kpis && submission.status === 'completed') {
         const date = new Date(submission.created_at).toLocaleDateString();
-        const hasPdf = !!submission.pdf_file;
+        const hasDocx = !!submission.docx_file;
         const hasVideo = !!submission.transcript;
         
         submission.extracted_kpis.forEach((kpi: string) => {
@@ -40,10 +40,10 @@ export const KPIVisualizations = ({ submissions }: KPIVisualizationsProps) => {
         });
         
         // Track source statistics
-        if (hasPdf && hasVideo) {
+        if (hasDocx && hasVideo) {
           sourceStats.mixed++;
-        } else if (hasPdf) {
-          sourceStats.pdf++;
+        } else if (hasDocx) {
+          sourceStats.docx++;
         } else if (hasVideo) {
           sourceStats.video++;
         }
@@ -53,7 +53,7 @@ export const KPIVisualizations = ({ submissions }: KPIVisualizationsProps) => {
           date,
           kpiCount: submission.extracted_kpis.length,
           sentiment: submission.sentiment,
-          hasPdf,
+          hasDocx,
           hasVideo
         });
       }
@@ -86,8 +86,8 @@ export const KPIVisualizations = ({ submissions }: KPIVisualizationsProps) => {
   // Source distribution data
   const sourceData = [
     { name: 'Video Only', value: sourceStats.video, color: '#3b82f6' },
-    { name: 'PDF Only', value: sourceStats.pdf, color: '#ef4444' },
-    { name: 'Video + PDF', value: sourceStats.mixed, color: '#22c55e' }
+    { name: 'DOCX Only', value: sourceStats.docx, color: '#ef4444' },
+    { name: 'Video + DOCX', value: sourceStats.mixed, color: '#22c55e' }
   ].filter(item => item.value > 0);
 
   const COLORS = ['#22c55e', '#f59e0b', '#ef4444'];
@@ -101,12 +101,12 @@ export const KPIVisualizations = ({ submissions }: KPIVisualizationsProps) => {
             <TrendingUp className="w-5 h-5" />
             KPI Visualizations
           </CardTitle>
-          <CardDescription>Upload videos and PDFs to see KPI analytics</CardDescription>
+          <CardDescription>Upload videos and DOCX files to see KPI analytics</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="text-center py-8 text-gray-500">
             <Target className="w-12 h-12 mx-auto mb-4 opacity-50" />
-            <p>No KPI data available yet. Upload and process videos with PDFs to see comprehensive insights.</p>
+            <p>No KPI data available yet. Upload and process videos with DOCX files to see comprehensive insights.</p>
           </div>
         </CardContent>
       </Card>
@@ -124,7 +124,7 @@ export const KPIVisualizations = ({ submissions }: KPIVisualizationsProps) => {
               KPI Metrics
             </CardTitle>
             <CardDescription>
-              Quantified metrics extracted from videos and PDFs
+              Quantified metrics extracted from videos and DOCX files
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -253,7 +253,7 @@ export const KPIVisualizations = ({ submissions }: KPIVisualizationsProps) => {
                           <div className="bg-white p-3 border rounded shadow">
                             <p className="font-semibold">{label}</p>
                             <p>KPIs: {payload[0].value}</p>
-                            <p>Sources: {data.hasPdf ? '📄 PDF' : ''} {data.hasVideo ? '🎥 Video' : ''}</p>
+                            <p>Sources: {data.hasDocx ? '📄 DOCX' : ''} {data.hasVideo ? '🎥 Video' : ''}</p>
                             <p>Sentiment: {data.sentiment}</p>
                           </div>
                         );
@@ -309,9 +309,9 @@ export const KPIVisualizations = ({ submissions }: KPIVisualizationsProps) => {
               <FileText className="w-5 h-5 text-red-600" />
               <div>
                 <p className="text-2xl font-bold">
-                  {submissions.filter(s => s.pdf_file && s.status === 'completed').length}
+                  {submissions.filter(s => s.docx_file && s.status === 'completed').length}
                 </p>
-                <p className="text-sm text-gray-600">PDFs Processed</p>
+                <p className="text-sm text-gray-600">DOCX Files Processed</p>
               </div>
             </div>
           </CardContent>
