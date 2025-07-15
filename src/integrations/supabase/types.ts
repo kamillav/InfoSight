@@ -81,11 +81,11 @@ export type Database = {
         Row: {
           ai_quotes: string[] | null
           created_at: string
+          docx_file: string | null
           extracted_kpis: string[] | null
           id: string
           key_points: string[] | null
           notes: string | null
-          pdf_file: string | null
           processing_error: string | null
           sentiment: string | null
           status: string
@@ -97,11 +97,11 @@ export type Database = {
         Insert: {
           ai_quotes?: string[] | null
           created_at?: string
+          docx_file?: string | null
           extracted_kpis?: string[] | null
           id?: string
           key_points?: string[] | null
           notes?: string | null
-          pdf_file?: string | null
           processing_error?: string | null
           sentiment?: string | null
           status?: string
@@ -113,11 +113,11 @@ export type Database = {
         Update: {
           ai_quotes?: string[] | null
           created_at?: string
+          docx_file?: string | null
           extracted_kpis?: string[] | null
           id?: string
           key_points?: string[] | null
           notes?: string | null
-          pdf_file?: string | null
           processing_error?: string | null
           sentiment?: string | null
           status?: string
