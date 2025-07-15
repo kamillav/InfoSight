@@ -3,22 +3,25 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { CalendarDays, TrendingUp, MessageSquare, Quote, FileText } from 'lucide-react';
+import { CalendarDays, TrendingUp, MessageSquare, Quote, FileText, Clock } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
 
 interface Submission {
   id: string;
-  userId: string;
-  userName: string;
-  date: string;
-  videoFile: string;
-  pdfFile?: string | null;
+  user_id: string;
+  created_at: string;
+  updated_at: string;
+  video_files: string[];
+  pdf_file?: string | null;
   notes: string;
-  transcript: string;
-  keyPoints: string[];
-  kpis: string[];
-  sentiment: 'positive' | 'neutral' | 'negative';
-  quotes: string[];
-  processed: boolean;
+  transcript: any;
+  key_points: string[];
+  extracted_kpis: string[];
+  sentiment: 'positive' | 'neutral' | 'negative' | null;
+  ai_quotes: string[];
+  status: 'processing' | 'completed' | 'failed';
+  processing_error?: string | null;
 }
 
 interface InsightsViewProps {
@@ -28,32 +31,62 @@ interface InsightsViewProps {
 export const InsightsView = ({ userId }: InsightsViewProps) => {
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
 
   useEffect(() => {
     const fetchSubmissions = async () => {
       try {
-        // Get submissions from localStorage (will be replaced with Supabase)
-        const allSubmissions = JSON.parse(localStorage.getItem('infosight_submissions') || '[]');
+        console.log('Fetching submissions for user:', userId);
         
-        // Filter submissions for current user
-        const userSubmissions = allSubmissions.filter((sub: Submission) => sub.userId === userId);
-        
-        console.log('Fetched user submissions:', userSubmissions);
-        setSubmissions(userSubmissions);
+        const { data, error } = await supabase
+          .from('submissions')
+          .select('*')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false });
+
+        if (error) {
+          console.error('Error fetching submissions:', error);
+          toast({
+            title: "Error loading submissions",
+            description: "Failed to load your submissions. Please try again.",
+            variant: "destructive"
+          });
+          return;
+        }
+
+        console.log('Fetched submissions:', data);
+        setSubmissions(data || []);
       } catch (error) {
         console.error('Error fetching submissions:', error);
+        toast({
+          title: "Error loading submissions",
+          description: "Failed to load your submissions. Please try again.",
+          variant: "destructive"
+        });
       } finally {
         setLoading(false);
       }
     };
 
-    fetchSubmissions();
-  }, [userId]);
+    if (userId) {
+      fetchSubmissions();
+    }
+  }, [userId, toast]);
 
-  const getSentimentColor = (sentiment: string) => {
+  const getSentimentColor = (sentiment: string | null) => {
     switch (sentiment) {
       case 'positive': return 'bg-green-100 text-green-800';
       case 'negative': return 'bg-red-100 text-red-800';
+      case 'neutral': return 'bg-gray-100 text-gray-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'completed': return 'bg-green-100 text-green-800';
+      case 'processing': return 'bg-blue-100 text-blue-800';
+      case 'failed': return 'bg-red-100 text-red-800';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
@@ -72,11 +105,15 @@ export const InsightsView = ({ userId }: InsightsViewProps) => {
         <div className="text-center">
           <MessageSquare className="w-12 h-12 text-gray-400 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-gray-900 mb-2">No submissions yet</h3>
-          <p className="text-gray-600">Upload your first video to see insights here.</p>
+          <p className="text-gray-600">Upload your first videos to see insights here.</p>
         </div>
       </div>
     );
   }
+
+  const completedSubmissions = submissions.filter(s => s.status === 'completed');
+  const positiveSubmissions = completedSubmissions.filter(s => s.sentiment === 'positive');
+  const totalKeyPoints = completedSubmissions.reduce((acc, s) => acc + (s.key_points?.length || 0), 0);
 
   return (
     <div className="space-y-6">
@@ -99,7 +136,9 @@ export const InsightsView = ({ userId }: InsightsViewProps) => {
               <TrendingUp className="w-5 h-5 text-green-600" />
               <div>
                 <p className="text-2xl font-bold">
-                  {submissions.length > 0 ? Math.round((submissions.filter(s => s.sentiment === 'positive').length / submissions.length) * 100) : 0}%
+                  {completedSubmissions.length > 0 
+                    ? Math.round((positiveSubmissions.length / completedSubmissions.length) * 100) 
+                    : 0}%
                 </p>
                 <p className="text-sm text-gray-600">Positive Sentiment</p>
               </div>
@@ -112,9 +151,7 @@ export const InsightsView = ({ userId }: InsightsViewProps) => {
             <div className="flex items-center gap-2">
               <MessageSquare className="w-5 h-5 text-purple-600" />
               <div>
-                <p className="text-2xl font-bold">
-                  {submissions.reduce((acc, s) => acc + s.keyPoints.length, 0)}
-                </p>
+                <p className="text-2xl font-bold">{totalKeyPoints}</p>
                 <p className="text-sm text-gray-600">Key Insights</p>
               </div>
             </div>
@@ -128,80 +165,125 @@ export const InsightsView = ({ userId }: InsightsViewProps) => {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle className="text-lg">
-                  Submission - {new Date(submission.date).toLocaleDateString()}
+                  Submission - {new Date(submission.created_at).toLocaleDateString()}
                 </CardTitle>
                 <div className="flex items-center gap-2">
-                  {submission.pdfFile && (
+                  <Badge className={getStatusColor(submission.status)}>
+                    {submission.status === 'processing' && <Clock className="w-3 h-3 mr-1" />}
+                    {submission.status}
+                  </Badge>
+                  {submission.pdf_file && (
                     <Badge variant="outline" className="text-xs">
                       <FileText className="w-3 h-3 mr-1" />
                       PDF Included
                     </Badge>
                   )}
-                  <Badge className={getSentimentColor(submission.sentiment)}>
-                    {submission.sentiment}
-                  </Badge>
+                  {submission.sentiment && (
+                    <Badge className={getSentimentColor(submission.sentiment)}>
+                      {submission.sentiment}
+                    </Badge>
+                  )}
                 </div>
               </div>
             </CardHeader>
             <CardContent>
-              <Tabs defaultValue="transcript" className="w-full">
-                <TabsList className="grid w-full grid-cols-4">
-                  <TabsTrigger value="transcript">Transcript</TabsTrigger>
-                  <TabsTrigger value="insights">Key Points</TabsTrigger>
-                  <TabsTrigger value="kpis">KPIs</TabsTrigger>
-                  <TabsTrigger value="quotes">Quotes</TabsTrigger>
-                </TabsList>
-                
-                <TabsContent value="transcript" className="mt-4">
-                  <div className="space-y-4">
-                    <div className="p-4 bg-gray-50 rounded-lg">
-                      <p className="text-sm leading-relaxed">{submission.transcript}</p>
+              {submission.status === 'processing' ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="text-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+                    <p className="text-gray-600">Processing your submission...</p>
+                    <p className="text-sm text-gray-500 mt-1">This may take a few minutes</p>
+                  </div>
+                </div>
+              ) : submission.status === 'failed' ? (
+                <div className="text-center py-8">
+                  <div className="text-red-600 mb-2">Processing Failed</div>
+                  {submission.processing_error && (
+                    <p className="text-sm text-gray-600">{submission.processing_error}</p>
+                  )}
+                </div>
+              ) : (
+                <Tabs defaultValue="transcript" className="w-full">
+                  <TabsList className="grid w-full grid-cols-4">
+                    <TabsTrigger value="transcript">Transcript</TabsTrigger>
+                    <TabsTrigger value="insights">Key Points</TabsTrigger>
+                    <TabsTrigger value="kpis">KPIs</TabsTrigger>
+                    <TabsTrigger value="quotes">Quotes</TabsTrigger>
+                  </TabsList>
+                  
+                  <TabsContent value="transcript" className="mt-4">
+                    <div className="space-y-4">
+                      {submission.transcript ? (
+                        <div className="p-4 bg-gray-50 rounded-lg">
+                          <p className="text-sm leading-relaxed">
+                            {typeof submission.transcript === 'string' 
+                              ? submission.transcript 
+                              : JSON.stringify(submission.transcript)}
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="p-4 bg-gray-50 rounded-lg">
+                          <p className="text-sm text-gray-500">Transcript not available</p>
+                        </div>
+                      )}
+                      {submission.notes && (
+                        <div className="p-4 bg-blue-50 rounded-lg">
+                          <h4 className="font-medium text-sm mb-2">Additional Notes:</h4>
+                          <p className="text-sm text-gray-700">{submission.notes}</p>
+                        </div>
+                      )}
+                      <div className="text-xs text-gray-500">
+                        <p>Videos: {submission.video_files?.length || 0} uploaded</p>
+                        {submission.pdf_file && <p>PDF: Document included</p>}
+                      </div>
                     </div>
-                    {submission.notes && (
-                      <div className="p-4 bg-blue-50 rounded-lg">
-                        <h4 className="font-medium text-sm mb-2">Additional Notes:</h4>
-                        <p className="text-sm text-gray-700">{submission.notes}</p>
-                      </div>
-                    )}
-                    <div className="text-xs text-gray-500">
-                      <p>Video: {submission.videoFile}</p>
-                      {submission.pdfFile && <p>PDF: {submission.pdfFile}</p>}
+                  </TabsContent>
+                  
+                  <TabsContent value="insights" className="mt-4">
+                    <div className="space-y-2">
+                      {submission.key_points && submission.key_points.length > 0 ? (
+                        submission.key_points.map((point, index) => (
+                          <div key={index} className="flex items-start gap-2">
+                            <div className="w-2 h-2 bg-blue-500 rounded-full mt-2"></div>
+                            <p className="text-sm">{point}</p>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-sm text-gray-500">No key points extracted yet</p>
+                      )}
                     </div>
-                  </div>
-                </TabsContent>
-                
-                <TabsContent value="insights" className="mt-4">
-                  <div className="space-y-2">
-                    {submission.keyPoints.map((point, index) => (
-                      <div key={index} className="flex items-start gap-2">
-                        <div className="w-2 h-2 bg-blue-500 rounded-full mt-2"></div>
-                        <p className="text-sm">{point}</p>
-                      </div>
-                    ))}
-                  </div>
-                </TabsContent>
-                
-                <TabsContent value="kpis" className="mt-4">
-                  <div className="flex flex-wrap gap-2">
-                    {submission.kpis.map((kpi, index) => (
-                      <Badge key={index} variant="outline">
-                        {kpi}
-                      </Badge>
-                    ))}
-                  </div>
-                </TabsContent>
-                
-                <TabsContent value="quotes" className="mt-4">
-                  <div className="space-y-3">
-                    {submission.quotes.map((quote, index) => (
-                      <div key={index} className="flex items-start gap-2">
-                        <Quote className="w-4 h-4 text-gray-400 mt-0.5" />
-                        <p className="text-sm italic text-gray-700">{quote}</p>
-                      </div>
-                    ))}
-                  </div>
-                </TabsContent>
-              </Tabs>
+                  </TabsContent>
+                  
+                  <TabsContent value="kpis" className="mt-4">
+                    <div className="flex flex-wrap gap-2">
+                      {submission.extracted_kpis && submission.extracted_kpis.length > 0 ? (
+                        submission.extracted_kpis.map((kpi, index) => (
+                          <Badge key={index} variant="outline">
+                            {kpi}
+                          </Badge>
+                        ))
+                      ) : (
+                        <p className="text-sm text-gray-500">No KPIs extracted yet</p>
+                      )}
+                    </div>
+                  </TabsContent>
+                  
+                  <TabsContent value="quotes" className="mt-4">
+                    <div className="space-y-3">
+                      {submission.ai_quotes && submission.ai_quotes.length > 0 ? (
+                        submission.ai_quotes.map((quote, index) => (
+                          <div key={index} className="flex items-start gap-2">
+                            <Quote className="w-4 h-4 text-gray-400 mt-0.5" />
+                            <p className="text-sm italic text-gray-700">{quote}</p>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-sm text-gray-500">No quotes extracted yet</p>
+                      )}
+                    </div>
+                  </TabsContent>
+                </Tabs>
+              )}
             </CardContent>
           </Card>
         ))}

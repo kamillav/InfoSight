@@ -14,6 +14,45 @@ export type Database = {
   }
   public: {
     Tables: {
+      kpi_definitions: {
+        Row: {
+          category: string | null
+          created_at: string
+          created_by: string
+          description: string | null
+          id: string
+          is_active: boolean
+          name: string
+          target_value: number | null
+          unit: string | null
+          updated_at: string
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          created_by: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          target_value?: number | null
+          unit?: string | null
+          updated_at?: string
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          created_by?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          target_value?: number | null
+          unit?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string
@@ -37,6 +76,105 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      submissions: {
+        Row: {
+          ai_quotes: string[] | null
+          created_at: string
+          extracted_kpis: string[] | null
+          id: string
+          key_points: string[] | null
+          notes: string | null
+          pdf_file: string | null
+          processing_error: string | null
+          sentiment: string | null
+          status: string
+          transcript: Json | null
+          updated_at: string
+          user_id: string
+          video_files: Json
+        }
+        Insert: {
+          ai_quotes?: string[] | null
+          created_at?: string
+          extracted_kpis?: string[] | null
+          id?: string
+          key_points?: string[] | null
+          notes?: string | null
+          pdf_file?: string | null
+          processing_error?: string | null
+          sentiment?: string | null
+          status?: string
+          transcript?: Json | null
+          updated_at?: string
+          user_id: string
+          video_files: Json
+        }
+        Update: {
+          ai_quotes?: string[] | null
+          created_at?: string
+          extracted_kpis?: string[] | null
+          id?: string
+          key_points?: string[] | null
+          notes?: string | null
+          pdf_file?: string | null
+          processing_error?: string | null
+          sentiment?: string | null
+          status?: string
+          transcript?: Json | null
+          updated_at?: string
+          user_id?: string
+          video_files?: Json
+        }
+        Relationships: []
+      }
+      user_kpi_performance: {
+        Row: {
+          created_at: string
+          id: string
+          kpi_id: string
+          period_end: string
+          period_start: string
+          submission_id: string | null
+          user_id: string
+          value: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          kpi_id: string
+          period_end: string
+          period_start: string
+          submission_id?: string | null
+          user_id: string
+          value: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          kpi_id?: string
+          period_end?: string
+          period_start?: string
+          submission_id?: string | null
+          user_id?: string
+          value?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_kpi_performance_kpi_id_fkey"
+            columns: ["kpi_id"]
+            isOneToOne: false
+            referencedRelation: "kpi_definitions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_kpi_performance_submission_id_fkey"
+            columns: ["submission_id"]
+            isOneToOne: false
+            referencedRelation: "submissions"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_roles: {
         Row: {
