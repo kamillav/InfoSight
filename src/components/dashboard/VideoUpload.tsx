@@ -1,4 +1,3 @@
-
 import { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -89,6 +88,25 @@ export const VideoUpload = () => {
     return data.path;
   };
 
+  const processSubmission = async (submissionId: string) => {
+    try {
+      const { data, error } = await supabase.functions.invoke('process-submission', {
+        body: { submissionId }
+      });
+
+      if (error) {
+        console.error('Error invoking processing function:', error);
+        throw error;
+      }
+
+      console.log('Processing function invoked successfully:', data);
+    } catch (error) {
+      console.error('Error processing submission:', error);
+      // The edge function will handle updating the status to failed
+      throw error;
+    }
+  };
+
   const handleUpload = async () => {
     if (!user || !profile) {
       toast({
@@ -150,6 +168,16 @@ export const VideoUpload = () => {
       if (submissionError) throw submissionError;
 
       console.log('Submission created:', submission);
+
+      // Start processing in background
+      processSubmission(submission.id).catch(error => {
+        console.error('Background processing failed:', error);
+        toast({
+          title: "Processing error",
+          description: "Your files were uploaded but processing failed. Please contact support.",
+          variant: "destructive"
+        });
+      });
 
       toast({
         title: "Submission uploaded successfully!",
