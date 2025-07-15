@@ -1,4 +1,3 @@
-
 import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -39,6 +38,7 @@ export const VideoUpload = () => {
   const [selectedPDF, setSelectedPDF] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [processing, setProcessing] = useState(false);
+  const [processingStatus, setProcessingStatus] = useState<string>('');
   const [notes, setNotes] = useState(['', '', '']);
   const [showNotes, setShowNotes] = useState<boolean[]>([false, false, false]);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
@@ -184,6 +184,7 @@ export const VideoUpload = () => {
 
     setUploading(true);
     setProcessing(true);
+    setProcessingStatus('Uploading files...');
 
     try {
       console.log('Starting batch upload process');
@@ -191,6 +192,7 @@ export const VideoUpload = () => {
       // Upload PDF first if selected (shared across all videos)
       let pdfFileName = null;
       if (selectedPDF) {
+        setProcessingStatus('Uploading PDF document...');
         pdfFileName = `${user.id}/${Date.now()}_shared_${selectedPDF.name}`;
         const { data: pdfUpload, error: pdfError } = await supabase.storage
           .from('submissions')
@@ -203,12 +205,15 @@ export const VideoUpload = () => {
         console.log('PDF uploaded successfully:', pdfUpload.path);
       }
 
-      // Process each video sequentially
+      // Create all submissions first (upload videos but don't process yet)
+      const submissionIds: string[] = [];
+      
       for (let questionIndex = 0; questionIndex < selectedVideos.length; questionIndex++) {
         const selectedVideo = selectedVideos[questionIndex];
         if (!selectedVideo) continue;
 
-        console.log(`Processing video for question ${questionIndex + 1}`);
+        setProcessingStatus(`Uploading video ${questionIndex + 1}/${videosToUpload.length}...`);
+        console.log(`Uploading video for question ${questionIndex + 1}`);
 
         // Upload video to Supabase Storage
         const videoFileName = `${user.id}/${Date.now()}_q${questionIndex}_${selectedVideo.name}`;
@@ -237,7 +242,7 @@ export const VideoUpload = () => {
             },
             pdf_file: pdfFileName,
             notes: submissionNotes,
-            status: 'processing'
+            status: 'uploaded' // Start with 'uploaded' status, not 'processing'
           })
           .select()
           .single();
@@ -247,32 +252,67 @@ export const VideoUpload = () => {
           throw new Error(`Failed to create submission for question ${questionIndex + 1}: ${dbError.message}`);
         }
         console.log('Submission created:', submission);
+        submissionIds.push(submission.id);
+      }
 
-        // Call the edge function to process the submission
-        console.log(`Calling process-submission edge function for question ${questionIndex + 1}...`);
-        const { data: functionResult, error: processingError } = await supabase.functions.invoke('process-submission', {
-          body: { submissionId: submission.id }
-        });
+      setUploading(false);
+      setProcessingStatus('All files uploaded! Processing videos one by one...');
 
-        if (processingError) {
-          console.error('Edge function processing error:', processingError);
-          await supabase
-            .from('submissions')
-            .update({ 
-              status: 'error', 
-              processing_error: `Processing function error: ${processingError.message}` 
-            })
-            .eq('id', submission.id);
-            
-          throw new Error(`Processing failed for question ${questionIndex + 1}: ${processingError.message}`);
+      // Now process videos one by one in sequence
+      for (let i = 0; i < submissionIds.length; i++) {
+        const submissionId = submissionIds[i];
+        const questionIndex = selectedVideos.findIndex((video, idx) => video !== null && i === selectedVideos.slice(0, idx + 1).filter(v => v !== null).length - 1);
+        
+        setProcessingStatus(`Processing video ${i + 1}/${submissionIds.length} (Question: ${PRESET_QUESTIONS[questionIndex] || 'Unknown'})...`);
+        
+        // Update status to processing
+        await supabase
+          .from('submissions')
+          .update({ status: 'processing' })
+          .eq('id', submissionId);
+
+        console.log(`Processing submission ${i + 1}/${submissionIds.length}: ${submissionId}`);
+        
+        try {
+          // Call the edge function to process this specific submission
+          const { data: functionResult, error: processingError } = await supabase.functions.invoke('process-submission', {
+            body: { submissionId }
+          });
+
+          if (processingError) {
+            console.error('Edge function processing error:', processingError);
+            await supabase
+              .from('submissions')
+              .update({ 
+                status: 'error', 
+                processing_error: `Processing function error: ${processingError.message}` 
+              })
+              .eq('id', submissionId);
+              
+            throw new Error(`Processing failed for video ${i + 1}: ${processingError.message}`);
+          }
+
+          console.log(`Video ${i + 1} processed successfully:`, functionResult);
+          
+          // Small delay between processing to avoid overwhelming the system
+          if (i < submissionIds.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, 2000));
+          }
+          
+        } catch (error) {
+          console.error(`Error processing video ${i + 1}:`, error);
+          // Continue with next video even if one fails
+          toast({
+            title: `Video ${i + 1} processing failed`,
+            description: error instanceof Error ? error.message : "Unknown error occurred",
+            variant: "destructive"
+          });
         }
-
-        console.log(`Edge function called successfully for question ${questionIndex + 1}:`, functionResult);
       }
 
       toast({
-        title: "All videos uploaded successfully!",
-        description: `${videosToUpload.length} video(s) are being processed. This may take up to 10 minutes per video.`,
+        title: "All videos processed!",
+        description: `${submissionIds.length} video(s) have been uploaded and processed sequentially.`,
       });
 
       // Reset form
@@ -288,10 +328,11 @@ export const VideoUpload = () => {
         pdfInputRef.current.value = '';
       }
 
-      // Reload submissions after a short delay
+      // Reload submissions
       setTimeout(() => {
         loadSubmissions();
       }, 1000);
+      
     } catch (error) {
       console.error('Batch upload error:', error);
       toast({
@@ -302,6 +343,7 @@ export const VideoUpload = () => {
     } finally {
       setUploading(false);
       setProcessing(false);
+      setProcessingStatus('');
     }
   };
 
@@ -324,6 +366,7 @@ export const VideoUpload = () => {
     switch (status) {
       case 'completed': return 'text-green-600 bg-green-100';
       case 'processing': return 'text-blue-600 bg-blue-100';
+      case 'uploaded': return 'text-yellow-600 bg-yellow-100';
       case 'error': return 'text-red-600 bg-red-100';
       default: return 'text-gray-600 bg-gray-100';
     }
@@ -488,12 +531,17 @@ export const VideoUpload = () => {
                   <div className="flex items-center gap-2">
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
                     <Clock className="w-4 h-4" />
-                    Processing Videos... (Up to 10 min each)
+                    {processingStatus || 'Processing...'}
                   </div>
                 ) : (
                   `Upload & Process All Videos (${selectedVideos.filter(v => v !== null).length})`
                 )}
               </Button>
+              {processing && processingStatus && (
+                <p className="text-sm text-gray-600 text-center mt-2">
+                  {processingStatus}
+                </p>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -514,8 +562,8 @@ export const VideoUpload = () => {
                     <p className="font-medium">Recording Guidelines:</p>
                     <ul className="mt-1 space-y-1 text-xs">
                       <li>• Upload one video per question (3 total)</li>
-                      <li>• Keep each video under 200MB and 2 minutes</li>
-                      <li>• Processing takes up to 10 minutes per video</li>
+                      <li>• Keep each video under 200MB and 25MB for processing</li>
+                      <li>• Videos processed one by one to avoid errors</li>
                       <li>• Speak clearly and mention specific metrics</li>
                       <li>• Include concrete examples and numbers</li>
                       <li>• Use PDF upload for supporting documents</li>
