@@ -3,16 +3,22 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { CalendarDays, TrendingUp, MessageSquare, Quote } from 'lucide-react';
+import { CalendarDays, TrendingUp, MessageSquare, Quote, FileText } from 'lucide-react';
 
 interface Submission {
   id: string;
+  userId: string;
+  userName: string;
   date: string;
+  videoFile: string;
+  pdfFile?: string | null;
+  notes: string;
   transcript: string;
   keyPoints: string[];
   kpis: string[];
   sentiment: 'positive' | 'neutral' | 'negative';
   quotes: string[];
+  processed: boolean;
 }
 
 interface InsightsViewProps {
@@ -25,46 +31,20 @@ export const InsightsView = ({ userId }: InsightsViewProps) => {
 
   useEffect(() => {
     const fetchSubmissions = async () => {
-      // Mock data - in real app, this would fetch from database
-      const mockSubmissions: Submission[] = [
-        {
-          id: '1',
-          date: '2024-01-15',
-          transcript: 'This week I focused on improving our lead generation process. We implemented a new qualification framework that resulted in 25% higher conversion rates. The team collaborated effectively on the new CRM integration, and we saw immediate improvements in lead quality and tracking accuracy.',
-          keyPoints: [
-            'Implemented new lead qualification framework',
-            'Achieved 25% improvement in conversion rates',
-            'Successful CRM integration and team collaboration'
-          ],
-          kpis: ['Conversion Rate', 'Lead Quality', 'Team Collaboration'],
-          sentiment: 'positive',
-          quotes: [
-            'We implemented a new qualification framework that resulted in 25% higher conversion rates',
-            'The team collaborated effectively on the new CRM integration'
-          ]
-        },
-        {
-          id: '2',
-          date: '2024-01-08',
-          transcript: 'Had some challenges this week with the client onboarding process. The new system had a few bugs that caused delays, but we managed to resolve them quickly. Despite the initial setbacks, we maintained our customer satisfaction scores and learned valuable lessons for future implementations.',
-          keyPoints: [
-            'Resolved system bugs in onboarding process',
-            'Maintained customer satisfaction despite challenges',
-            'Gained valuable implementation insights'
-          ],
-          kpis: ['Customer Satisfaction', 'System Reliability', 'Response Time'],
-          sentiment: 'neutral',
-          quotes: [
-            'We managed to resolve them quickly',
-            'Maintained our customer satisfaction scores'
-          ]
-        }
-      ];
-      
-      setTimeout(() => {
-        setSubmissions(mockSubmissions);
+      try {
+        // Get submissions from localStorage (will be replaced with Supabase)
+        const allSubmissions = JSON.parse(localStorage.getItem('infosight_submissions') || '[]');
+        
+        // Filter submissions for current user
+        const userSubmissions = allSubmissions.filter((sub: Submission) => sub.userId === userId);
+        
+        console.log('Fetched user submissions:', userSubmissions);
+        setSubmissions(userSubmissions);
+      } catch (error) {
+        console.error('Error fetching submissions:', error);
+      } finally {
         setLoading(false);
-      }, 1000);
+      }
     };
 
     fetchSubmissions();
@@ -82,6 +62,18 @@ export const InsightsView = ({ userId }: InsightsViewProps) => {
     return (
       <div className="flex items-center justify-center py-12">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  if (submissions.length === 0) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="text-center">
+          <MessageSquare className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-gray-900 mb-2">No submissions yet</h3>
+          <p className="text-gray-600">Upload your first video to see insights here.</p>
+        </div>
       </div>
     );
   }
@@ -107,7 +99,7 @@ export const InsightsView = ({ userId }: InsightsViewProps) => {
               <TrendingUp className="w-5 h-5 text-green-600" />
               <div>
                 <p className="text-2xl font-bold">
-                  {Math.round((submissions.filter(s => s.sentiment === 'positive').length / submissions.length) * 100)}%
+                  {submissions.length > 0 ? Math.round((submissions.filter(s => s.sentiment === 'positive').length / submissions.length) * 100) : 0}%
                 </p>
                 <p className="text-sm text-gray-600">Positive Sentiment</p>
               </div>
@@ -138,9 +130,17 @@ export const InsightsView = ({ userId }: InsightsViewProps) => {
                 <CardTitle className="text-lg">
                   Submission - {new Date(submission.date).toLocaleDateString()}
                 </CardTitle>
-                <Badge className={getSentimentColor(submission.sentiment)}>
-                  {submission.sentiment}
-                </Badge>
+                <div className="flex items-center gap-2">
+                  {submission.pdfFile && (
+                    <Badge variant="outline" className="text-xs">
+                      <FileText className="w-3 h-3 mr-1" />
+                      PDF Included
+                    </Badge>
+                  )}
+                  <Badge className={getSentimentColor(submission.sentiment)}>
+                    {submission.sentiment}
+                  </Badge>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
@@ -153,8 +153,20 @@ export const InsightsView = ({ userId }: InsightsViewProps) => {
                 </TabsList>
                 
                 <TabsContent value="transcript" className="mt-4">
-                  <div className="p-4 bg-gray-50 rounded-lg">
-                    <p className="text-sm leading-relaxed">{submission.transcript}</p>
+                  <div className="space-y-4">
+                    <div className="p-4 bg-gray-50 rounded-lg">
+                      <p className="text-sm leading-relaxed">{submission.transcript}</p>
+                    </div>
+                    {submission.notes && (
+                      <div className="p-4 bg-blue-50 rounded-lg">
+                        <h4 className="font-medium text-sm mb-2">Additional Notes:</h4>
+                        <p className="text-sm text-gray-700">{submission.notes}</p>
+                      </div>
+                    )}
+                    <div className="text-xs text-gray-500">
+                      <p>Video: {submission.videoFile}</p>
+                      {submission.pdfFile && <p>PDF: {submission.pdfFile}</p>}
+                    </div>
                   </div>
                 </TabsContent>
                 
@@ -184,7 +196,7 @@ export const InsightsView = ({ userId }: InsightsViewProps) => {
                     {submission.quotes.map((quote, index) => (
                       <div key={index} className="flex items-start gap-2">
                         <Quote className="w-4 h-4 text-gray-400 mt-0.5" />
-                        <p className="text-sm italic text-gray-700">"{quote}"</p>
+                        <p className="text-sm italic text-gray-700">{quote}</p>
                       </div>
                     ))}
                   </div>
