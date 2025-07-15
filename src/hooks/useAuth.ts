@@ -1,85 +1,154 @@
 
 import { useState, useEffect } from 'react';
+import { User, Session } from '@supabase/supabase-js';
+import { supabase } from '@/integrations/supabase/client';
 
-export interface User {
+export interface UserProfile {
   id: string;
   email: string;
   name: string;
-  role: 'admin' | 'user';
+  role: 'admin' | 'team_lead' | 'user';
   created_at: string;
 }
 
 export const useAuth = () => {
   const [user, setUser] = useState<User | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const fetchUserProfile = async (userId: string) => {
+    try {
+      // Fetch user profile
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+      if (profileError) throw profileError;
+
+      // Fetch user role
+      const { data: roleData, error: roleError } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', userId)
+        .single();
+
+      if (roleError) throw roleError;
+
+      const userProfile: UserProfile = {
+        ...profileData,
+        role: roleData.role
+      };
+
+      console.log('Fetched user profile:', userProfile);
+      setProfile(userProfile);
+      return userProfile;
+    } catch (error) {
+      console.error('Error fetching user profile:', error);
+      return null;
+    }
+  };
+
   useEffect(() => {
-    // Check auth on mount
-    const checkAuth = async () => {
-      try {
-        const userData = localStorage.getItem('infosight_user');
-        if (userData) {
-          const parsedUser = JSON.parse(userData);
-          console.log('Found user in localStorage:', parsedUser);
-          setUser(parsedUser);
+    // Set up auth state listener
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        console.log('Auth state change:', event, session?.user?.email);
+        setSession(session);
+        setUser(session?.user ?? null);
+        
+        if (session?.user) {
+          // Defer profile fetching to avoid deadlocks
+          setTimeout(() => {
+            fetchUserProfile(session.user.id);
+          }, 0);
+        } else {
+          setProfile(null);
         }
-      } catch (error) {
-        console.error('Auth check failed:', error);
-        localStorage.removeItem('infosight_user'); // Clean up invalid data
-      } finally {
+        
         setLoading(false);
       }
-    };
+    );
 
-    checkAuth();
+    // Check for existing session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      
+      if (session?.user) {
+        fetchUserProfile(session.user.id);
+      }
+      
+      setLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   const signIn = async (email: string, password: string) => {
     console.log('Attempting sign in for:', email);
     
-    // Mock authentication - in real app, this would use Supabase auth
-    const mockUser: User = {
-      id: '1',
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
-      name: email.split('@')[0],
-      role: email.includes('admin') ? 'admin' : 'user',
-      created_at: new Date().toISOString()
-    };
-    
-    localStorage.setItem('infosight_user', JSON.stringify(mockUser));
-    setUser(mockUser);
-    console.log('User signed in:', mockUser);
-    return mockUser;
+      password,
+    });
+
+    if (error) {
+      console.error('Sign in error:', error);
+      throw error;
+    }
+
+    console.log('User signed in:', data.user?.email);
+    return data;
   };
 
   const signUp = async (email: string, password: string, name: string) => {
     console.log('Attempting sign up for:', email);
     
-    // Mock registration - in real app, this would use Supabase auth
-    const mockUser: User = {
-      id: Math.random().toString(36).substring(7),
-      email,
-      name,
-      role: 'user',
-      created_at: new Date().toISOString()
-    };
+    const redirectUrl = `${window.location.origin}/`;
     
-    localStorage.setItem('infosight_user', JSON.stringify(mockUser));
-    setUser(mockUser);
-    console.log('User signed up:', mockUser);
-    return mockUser;
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        emailRedirectTo: redirectUrl,
+        data: {
+          name: name
+        }
+      }
+    });
+
+    if (error) {
+      console.error('Sign up error:', error);
+      throw error;
+    }
+
+    console.log('User signed up:', data.user?.email);
+    return data;
   };
 
   const signOut = async () => {
     console.log('Signing out user');
-    localStorage.removeItem('infosight_user');
+    const { error } = await supabase.auth.signOut();
+    
+    if (error) {
+      console.error('Sign out error:', error);
+      throw error;
+    }
+    
     setUser(null);
+    setSession(null);
+    setProfile(null);
   };
 
-  console.log('useAuth state - user:', user, 'loading:', loading);
+  console.log('useAuth state - user:', user?.email, 'profile:', profile, 'loading:', loading);
 
   return {
     user,
+    session,
+    profile,
     loading,
     signIn,
     signUp,

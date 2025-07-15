@@ -4,7 +4,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { Eye, EyeOff, Zap } from 'lucide-react';
@@ -25,11 +24,28 @@ export const AuthPage = () => {
 
     try {
       if (isSignUp) {
-        await signUp(email, password, name);
-        toast({
-          title: "Account created successfully",
-          description: "Welcome to Infosight!"
-        });
+        if (!name.trim()) {
+          toast({
+            title: "Name required",
+            description: "Please enter your full name.",
+            variant: "destructive"
+          });
+          return;
+        }
+        
+        const { data } = await signUp(email, password, name);
+        
+        if (data.user && !data.session) {
+          toast({
+            title: "Check your email",
+            description: "Please check your inbox and click the confirmation link to complete your registration.",
+          });
+        } else {
+          toast({
+            title: "Account created successfully",
+            description: "Welcome to Infosight!"
+          });
+        }
       } else {
         await signIn(email, password);
         toast({
@@ -37,10 +53,24 @@ export const AuthPage = () => {
           description: "Welcome back to Infosight!"
         });
       }
-    } catch (error) {
+    } catch (error: any) {
+      console.error('Auth error:', error);
+      
+      let errorMessage = "Please check your credentials and try again.";
+      
+      if (error.message?.includes('Invalid login credentials')) {
+        errorMessage = "Invalid email or password. Please try again.";
+      } else if (error.message?.includes('User already registered')) {
+        errorMessage = "An account with this email already exists. Try signing in instead.";
+      } else if (error.message?.includes('Password should be at least 6 characters')) {
+        errorMessage = "Password must be at least 6 characters long.";
+      } else if (error.message?.includes('Unable to validate email address')) {
+        errorMessage = "Please enter a valid email address.";
+      }
+      
       toast({
         title: "Authentication failed",
-        description: "Please check your credentials and try again.",
+        description: errorMessage,
         variant: "destructive"
       });
     } finally {

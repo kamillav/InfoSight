@@ -8,10 +8,10 @@ import { useAuth } from '@/hooks/useAuth';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 export const Dashboard = () => {
-  const { user } = useAuth();
+  const { profile } = useAuth();
   const [activeTab, setActiveTab] = useState('upload');
 
-  if (!user) return null;
+  if (!profile) return null;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -20,7 +20,7 @@ export const Dashboard = () => {
       <main className="container mx-auto px-4 py-8">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            Welcome back, {user.name}
+            Welcome back, {profile.name}
           </h1>
           <p className="text-gray-600">
             Share your weekly insights and track your impact
@@ -31,7 +31,7 @@ export const Dashboard = () => {
           <TabsList className="grid w-full grid-cols-3 max-w-md">
             <TabsTrigger value="upload">Upload Video</TabsTrigger>
             <TabsTrigger value="insights">My Insights</TabsTrigger>
-            {user.role === 'admin' && (
+            {profile.role === 'admin' && (
               <TabsTrigger value="admin">Admin View</TabsTrigger>
             )}
           </TabsList>
@@ -41,10 +41,10 @@ export const Dashboard = () => {
           </TabsContent>
 
           <TabsContent value="insights" className="space-y-6">
-            <InsightsView userId={user.id} />
+            <InsightsView userId={profile.id} />
           </TabsContent>
 
-          {user.role === 'admin' && (
+          {profile.role === 'admin' && (
             <TabsContent value="admin" className="space-y-6">
               <AdminView />
             </TabsContent>
