@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -17,6 +16,7 @@ import { Users, TrendingUp, MessageSquare, BarChart3, Plus, Edit, Trash2 } from 
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
+import type { Json } from '@/integrations/supabase/types';
 
 interface KPIDefinition {
   id: string;
@@ -34,20 +34,28 @@ interface UserSubmission {
   user_id: string;
   created_at: string;
   status: string;
-  sentiment?: string;
-  key_points?: string[];
-  extracted_kpis?: string[];
-  ai_quotes?: string[];
+  sentiment?: string | null;
+  key_points?: string[] | null;
+  extracted_kpis?: string[] | null;
+  ai_quotes?: string[] | null;
+  video_files: Json;
+  pdf_file?: string | null;
   profiles?: {
     name: string;
     email: string;
-  };
+  } | null;
+}
+
+interface UserProfile {
+  id: string;
+  name: string;
+  email: string;
 }
 
 export const AdminView = () => {
   const [kpis, setKpis] = useState<KPIDefinition[]>([]);
   const [submissions, setSubmissions] = useState<UserSubmission[]>([]);
-  const [users, setUsers] = useState<any[]>([]);
+  const [users, setUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [isKPIDialogOpen, setIsKPIDialogOpen] = useState(false);
   const [editingKPI, setEditingKPI] = useState<KPIDefinition | null>(null);
@@ -113,7 +121,15 @@ export const AdminView = () => {
       return;
     }
 
-    setSubmissions(data || []);
+    // Type assertion to handle the complex nested type
+    const typedData = data as (UserSubmission & {
+      profiles: {
+        name: string;
+        email: string;
+      } | null;
+    })[];
+
+    setSubmissions(typedData || []);
   };
 
   const fetchUsers = async () => {
@@ -250,7 +266,7 @@ export const AdminView = () => {
     setIsKPIDialogOpen(true);
   };
 
-  const getSentimentColor = (sentiment: string) => {
+  const getSentimentColor = (sentiment: string | null | undefined) => {
     switch (sentiment) {
       case 'positive': return 'bg-green-100 text-green-800';
       case 'negative': return 'bg-red-100 text-red-800';

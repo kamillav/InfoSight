@@ -6,20 +6,21 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CalendarDays, TrendingUp, MessageSquare, Quote, FileText, Clock } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import type { Json } from '@/integrations/supabase/types';
 
 interface Submission {
   id: string;
   user_id: string;
   created_at: string;
   updated_at: string;
-  video_files: string[];
+  video_files: Json;
   pdf_file?: string | null;
-  notes: string;
-  transcript: any;
-  key_points: string[];
-  extracted_kpis: string[];
+  notes: string | null;
+  transcript: Json | null;
+  key_points: string[] | null;
+  extracted_kpis: string[] | null;
   sentiment: 'positive' | 'neutral' | 'negative' | null;
-  ai_quotes: string[];
+  ai_quotes: string[] | null;
   status: 'processing' | 'completed' | 'failed';
   processing_error?: string | null;
 }
@@ -89,6 +90,13 @@ export const InsightsView = ({ userId }: InsightsViewProps) => {
       case 'failed': return 'bg-red-100 text-red-800';
       default: return 'bg-gray-100 text-gray-800';
     }
+  };
+
+  const getVideoFiles = (videoFiles: Json): string[] => {
+    if (Array.isArray(videoFiles)) {
+      return videoFiles as string[];
+    }
+    return [];
   };
 
   if (loading) {
@@ -233,7 +241,7 @@ export const InsightsView = ({ userId }: InsightsViewProps) => {
                         </div>
                       )}
                       <div className="text-xs text-gray-500">
-                        <p>Videos: {submission.video_files?.length || 0} uploaded</p>
+                        <p>Videos: {getVideoFiles(submission.video_files).length} uploaded</p>
                         {submission.pdf_file && <p>PDF: Document included</p>}
                       </div>
                     </div>
